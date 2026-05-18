@@ -108,6 +108,13 @@ async function fetchOrders(): Promise<Order[]> {
   return data.map(mapDbOrder);
 }
 
+async function fetchOrderById(orderId: string): Promise<Order | null> {
+  const res = await fetch(`${ORDERS_API}?order_id=${encodeURIComponent(orderId)}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error('Failed to fetch order');
+  return mapDbOrder((await res.json()) as DbOrder);
+}
+
 async function createOrder(order: Order): Promise<Order> {
   const res = await fetch(ORDERS_API, {
     method: 'POST',
@@ -295,7 +302,7 @@ function NotFound() {
           <div className="w-10 h-10 bg-amber-400 rounded-lg flex items-center justify-center shadow-lg">
             <Database className="w-5 h-5 text-gray-900" />
           </div>
-          <span className="text-white font-bold text-xl tracking-tight">Matornawo Datahub</span>
+          <span className="text-white font-bold text-xl tracking-tight">MATOE CONNECT</span>
         </div>
 
         {/* 404 */}
@@ -337,7 +344,7 @@ function NotFound() {
           </button>
 
           <button
-            onClick={() => window.open('https://wa.me/233534764068?text=Hello%20Matornawo%20Datahub%2C%20I%20need%20help.', '_blank')}
+            onClick={() => window.open('https://wa.me/233534764068?text=Hello%20MATOE%20CONNECT%2C%20I%20need%20help.', '_blank')}
             className="flex-1 py-3 px-6 rounded-xl font-bold text-white text-sm shadow-lg hover:scale-105 active:scale-95 transition-all duration-200 flex items-center justify-center gap-2"
             style={{ backgroundColor: '#25D366' }}
           >
@@ -348,7 +355,7 @@ function NotFound() {
 
         {/* Footer */}
         <p className="text-gray-500 text-xs mt-12">
-          © {new Date().getFullYear()} Matornawo Datahub. All rights reserved.
+          © {new Date().getFullYear()} MATOE CONNECT. All rights reserved.
         </p>
       </div>
     </div>
@@ -416,7 +423,7 @@ function StoreClosed({ network }: { network: Network }) {
           Please check back later or contact us on WhatsApp.
         </p>
         <button
-          onClick={() => window.open('https://wa.me/233534764068?text=Hello%20Matornawo%20Datahub%2C%20I%20need%20help%20with%20my%20order.%20%0A%0AOrder%20ID%3A%20%0ARecipient%20Number%3A%20%0AIssue%3A%20', '_blank')}
+          onClick={() => window.open('https://wa.me/233534764068?text=Hello%20MATOE%20CONNECT%2C%20I%20need%20help%20with%20my%20order.%20%0A%0AOrder%20ID%3A%20%0ARecipient%20Number%3A%20%0AIssue%3A%20', '_blank')}
           className="w-full flex items-center justify-center gap-2 text-white font-semibold text-sm py-2.5 px-4 rounded-xl transition-colors"
           style={{ backgroundColor: '#25D366' }}
         >
@@ -518,8 +525,6 @@ function BuyModal({
 
   if (!isOpen || !selectedPackage) return null;
 
-  const network = selectedPackage.network;
-  const packageSize = selectedPackage.size;
   const price = selectedPackage.price;
   const serviceFee = parseFloat((price * 0.02).toFixed(2));
   const total = parseFloat((price * 1.02).toFixed(2));
@@ -629,7 +634,7 @@ function BuyModal({
       timeStyle: 'short',
     });
 
-    const message = `🌐 *MATORNAWO DATAHUB — ORDER CONFIRMATION*
+    const message = `🌐 *MATOE CONNECT — ORDER CONFIRMATION*
 
 ✅ *Payment Successful!*
 
@@ -649,7 +654,7 @@ function BuyModal({
 
 _Please send this message as a reminder of your order. Your data bundle will be sent to ${recipientPhone} shortly._
 
-Thank you for choosing Matornawo Datahub! 🙏`;
+Thank you for choosing MATOE CONNECT! 🙏`;
 
     const encodedMessage = encodeURIComponent(message);
     const whatsappURL = `https://wa.me/233534764068?text=${encodedMessage}`;
@@ -829,7 +834,7 @@ function Dashboard({
           </div>
           <div className="px-5 py-4 border-b border-gray-100">
             <button
-              onClick={() => window.open('https://wa.me/233534764068?text=Hello%20Matornawo%20Datahub%2C%20I%20need%20help%20with%20my%20order.%20%0A%0AOrder%20ID%3A%20%0ARecipient%20Number%3A%20%0AIssue%3A%20', '_blank')}
+              onClick={() => window.open('https://wa.me/233534764068?text=Hello%20MATOE%20CONNECT%2C%20I%20need%20help%20with%20my%20order.%20%0A%0AOrder%20ID%3A%20%0ARecipient%20Number%3A%20%0AIssue%3A%20', '_blank')}
               className="w-full flex items-center gap-2 text-white font-semibold text-sm py-2 px-3 rounded-lg hover:opacity-90 transition-opacity"
               style={{ backgroundColor: '#25D366' }}
             >
@@ -909,8 +914,15 @@ function TrackOrder({ orders }: { orders: Order[] }) {
     const key = orderId.trim().toUpperCase();
     if (!key) return;
     setSearched(true);
-    const found = orders.find((o) => o.orderId === key);
-    setResult(found ?? 'not-found');
+    void fetchOrderById(key)
+      .then((found) => {
+        setResult(found ?? 'not-found');
+      })
+      .catch((err) => {
+        console.error('Failed to fetch order for tracking:', err);
+        const found = orders.find((o) => o.orderId === key);
+        setResult(found ?? 'not-found');
+      });
   };
 
   return (
@@ -1395,7 +1407,7 @@ function AdminLogin({ onLogin }: { onLogin: () => void; showToast?: (msg: string
           <div className="w-12 h-12 rounded-lg bg-amber-400 flex items-center justify-center mx-auto mb-3">
             <Database className="w-6 h-6 text-gray-900" />
           </div>
-          <h1 className="text-2xl font-extrabold text-gray-900">Matornawo Datahub</h1>
+          <h1 className="text-2xl font-extrabold text-gray-900">MATOE CONNECT</h1>
           <p className="text-gray-600 text-sm mt-1">Admin Portal</p>
         </div>
         <div className="space-y-4">
@@ -1568,7 +1580,7 @@ export default function App() {
           <div className="w-8 h-8 rounded-lg bg-amber-400 flex items-center justify-center flex-shrink-0">
             <Database className="w-4 h-4 text-gray-900" />
           </div>
-          <span className="text-white font-bold text-sm leading-tight">Matornawo Datahub</span>
+          <span className="text-white font-bold text-sm leading-tight">MATOE CONNECT</span>
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1">
@@ -1615,7 +1627,7 @@ export default function App() {
           <div className="w-6 h-6 rounded-md bg-amber-400 flex items-center justify-center">
             <Database className="w-3.5 h-3.5 text-gray-900" />
           </div>
-          <span className="text-white font-bold text-sm">Matornawo Datahub</span>
+          <span className="text-white font-bold text-sm">MATOE CONNECT</span>
         </div>
         <button className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center hover:bg-gray-700 transition-colors">
           <User className="w-4 h-4 text-gray-300" />

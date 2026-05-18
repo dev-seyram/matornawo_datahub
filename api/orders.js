@@ -33,6 +33,17 @@ export default async function handler(req, res) {
     await initDB();
 
     if (req.method === 'GET') {
+      const rawId = req.query?.order_id;
+      const orderId = Array.isArray(rawId) ? rawId[0] : rawId;
+      if (orderId) {
+        const rows = await sql`
+          SELECT * FROM orders WHERE order_id = ${String(orderId).toUpperCase()}
+        `;
+        if (rows.length === 0) {
+          return res.status(404).json({ error: 'Order not found' });
+        }
+        return res.status(200).json(rows[0]);
+      }
       const orders = await sql`SELECT * FROM orders ORDER BY created_at DESC`;
       return res.status(200).json(orders);
     }
