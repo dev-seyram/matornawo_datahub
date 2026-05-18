@@ -12,7 +12,7 @@ export default function NotFound() {
         <div className="w-10 h-10 bg-amber-400 rounded-lg flex items-center justify-center">
           <span className="text-black font-bold text-lg">M</span>
         </div>
-        <span className="text-white font-bold text-xl">Matornawo Datahub</span>
+        <span className="text-white font-bold text-xl">MATOE CONNECT</span>
       </div>
 
       {/* 404 Text */}
@@ -40,7 +40,7 @@ export default function NotFound() {
         </button>
 
         <button
-          onClick={() => window.open('https://wa.me/233534764068?text=Hello%20Matornawo%20Datahub%2C%20I%20need%20help.', '_blank')}
+          onClick={() => window.open('https://wa.me/233534764068?text=Hello%20MATOE%20CONNECT%2C%20I%20need%20help.', '_blank')}
           className="w-full py-3 rounded-xl font-semibold text-white flex items-center justify-center gap-2"
           style={{ backgroundColor: '#25D366' }}
         >
@@ -50,7 +50,7 @@ export default function NotFound() {
 
       {/* Footer */}
       <p className="text-gray-600 text-sm mt-12">
-        © {new Date().getFullYear()} Matornawo Datahub. All rights reserved.
+        © {new Date().getFullYear()} MATOE CONNECT. All rights reserved.
       </p>
     </div>
   );
