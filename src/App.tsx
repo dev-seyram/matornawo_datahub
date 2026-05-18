@@ -2689,7 +2689,9 @@ export default function App() {
 
   ];
 
-
+if (activePage === 'not-found') {
+    return <NotFound />;
+  }
 
   if (activePage === 'admin') {
 
