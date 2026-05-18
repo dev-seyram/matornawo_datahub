@@ -194,7 +194,27 @@ const generateOrderId = () => {
   return id;
 };
 
-function loadStoredPackages(): Package[] {
+type DbPackage = {
+  package_id: string;
+  network: string;
+  size: string;
+  validity: string;
+  price: number | string;
+};
+
+const PACKAGES_API = '/api/packages';
+
+function mapDbPackage(row: DbPackage): Package {
+  return {
+    id: row.package_id,
+    network: row.network as Network,
+    size: row.size,
+    validity: row.validity,
+    price: parseFloat(String(row.price)),
+  };
+}
+
+function loadCachedPackages(): Package[] {
   if (typeof window === 'undefined') return DEFAULT_MTN_PACKAGES;
   try {
     const raw = localStorage.getItem(PACKAGES_STORAGE_KEY);
@@ -1015,7 +1035,6 @@ function AdminPanel({
     setEditError(null);
   };
 
-  // FIX: Use functional updater so React re-renders storefront immediately
   const saveEditing = (id: string) => {
     const size = editForm.size.trim();
     const validity = editForm.validity.trim();
@@ -1023,10 +1042,22 @@ function AdminPanel({
     if (!size) { setEditError('Size is required'); return; }
     if (!validity) { setEditError('Validity is required'); return; }
     if (isNaN(price) || price <= 0) { setEditError('Price must be a number greater than 0'); return; }
-    setPackages((prev) => prev.map((p) => (p.id === id ? { ...p, size, validity, price } : p)));
-    setEditingId(null);
-    setEditError(null);
-    showToast('Package updated successfully', 'success');
+    fetch(PACKAGES_API, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ package_id: id, size, validity, price }),
+    })
+      .then((res) => res.json())
+      .then(() => {
+        setPackages((prev) => prev.map((p) => (p.id === id ? { ...p, size, validity, price } : p)));
+        setEditingId(null);
+        setEditError(null);
+        showToast('Package updated successfully', 'success');
+      })
+      .catch((err) => {
+        console.error('Failed to update package:', err);
+        showToast('Failed to update package', 'error');
+      });
   };
 
   const filteredOrders = orders.filter(
@@ -1038,31 +1069,54 @@ function AdminPanel({
     void onUpdateOrderStatus(orderId, status);
   };
 
-  // FIX: Use functional updater
   const handleDeletePackage = (id: string) => {
-    if (confirm('Are you sure you want to delete this package?')) {
-      setPackages((prev) => prev.filter((p) => p.id !== id));
-      showToast('Package deleted', 'success');
-    }
+    if (!confirm('Are you sure you want to delete this package?')) return;
+    fetch(PACKAGES_API, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ package_id: id }),
+    })
+      .then(() => {
+        setPackages((prev) => prev.filter((p) => p.id !== id));
+        showToast('Package deleted', 'success');
+      })
+      .catch((err) => {
+        console.error('Failed to delete package:', err);
+        showToast('Failed to delete package', 'error');
+      });
   };
 
-  // FIX: Use functional updater
   const handleAddPackage = () => {
     if (!newPackageForm.size || !newPackageForm.validity || !newPackageForm.price) {
       showToast('Please fill all fields', 'error');
       return;
     }
-    const pkg: Package = {
-      id: `${Date.now()}`,
-      size: newPackageForm.size,
-      price: parseFloat(newPackageForm.price),
-      validity: newPackageForm.validity,
-      network: newPackageForm.network as Network,
-    };
-    setPackages((prev) => [...prev, pkg]);
-    setNewPackageForm({ network: 'MTN', size: '', validity: '', price: '' });
-    setAddingPackage(false);
-    showToast('Package added successfully', 'success');
+    const network = newPackageForm.network as Network;
+    const size = newPackageForm.size;
+    const validity = newPackageForm.validity;
+    const price = parseFloat(newPackageForm.price);
+    fetch(PACKAGES_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        package_id: network.toLowerCase() + '-' + size.toLowerCase().replace(' ', ''),
+        network,
+        size,
+        validity,
+        price,
+      }),
+    })
+      .then((res) => res.json())
+      .then((newPkg: DbPackage) => {
+        setPackages((prev) => [...prev, mapDbPackage(newPkg)]);
+        setNewPackageForm({ network: 'MTN', size: '', validity: '', price: '' });
+        setAddingPackage(false);
+        showToast('Package added successfully', 'success');
+      })
+      .catch((err) => {
+        console.error('Failed to add package:', err);
+        showToast('Failed to add package', 'error');
+      });
   };
 
   return (
@@ -1379,7 +1433,8 @@ export default function App() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [adminLoggedIn, setAdminLoggedIn] = useState(!!localStorage.getItem('adminLoggedIn'));
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [packages, setPackages] = useState<Package[]>(loadStoredPackages);
+  const [packages, setPackages] = useState<Package[]>(DEFAULT_MTN_PACKAGES);
+  const packagesHydratedRef = useRef(false);
   const [networkStates, setNetworkStates] = useState<NetworkStates>(loadNetworkStates);
 
   useEffect(() => {
@@ -1397,6 +1452,23 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    fetch(PACKAGES_API)
+      .then((res) => res.json())
+      .then((data: DbPackage[]) => {
+        packagesHydratedRef.current = true;
+        if (Array.isArray(data) && data.length > 0) {
+          setPackages(data.map(mapDbPackage));
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load packages from database:', err);
+        packagesHydratedRef.current = true;
+        setPackages(loadCachedPackages());
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!packagesHydratedRef.current) return;
     localStorage.setItem(PACKAGES_STORAGE_KEY, JSON.stringify(packages));
   }, [packages]);
 
@@ -1417,8 +1489,10 @@ export default function App() {
   const handleOrderCreated = async (order: Order) => {
     try {
       const saved = await createOrder(order);
+      console.log('Order saved to database:', saved);
       setOrders((prev) => [...prev, saved]);
-    } catch {
+    } catch (err) {
+      console.error('Failed to save order to database:', err);
       setOrders((prev) => [...prev, order]);
     }
   };
