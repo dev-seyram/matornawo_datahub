@@ -1,10 +1,53 @@
 import { useState, useEffect } from 'react';
-import { LayoutDashboard, ShoppingCart, Search, UserPlus, Clock, Wifi, Users, Rocket, User, ChevronRight, CheckCircle, Loader, Database, X, CreditCard, LogOut, CreditCard as Edit2, Trash2, Plus, MessageCircle, Menu } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Search, UserPlus, Clock, Wifi, Users, Rocket, User, ChevronRight, CheckCircle, Loader, Database, X, CreditCard, LogOut, CreditCard as Edit2, Trash2, Plus, MessageCircle, Menu, Lock } from 'lucide-react';
 
 type Page = 'dashboard' | 'buy-data' | 'track-order' | 'admin';
 type Network = 'MTN' | 'AirtelTigo' | 'Telecel';
+type NetworkState = 'active' | 'disabled' | 'closed';
+type NetworkStates = Record<Network, NetworkState>;
 type AdminTab = 'orders' | 'packages' | 'networks';
 type OrderStatus = 'Processing' | 'Completed' | 'Failed';
+
+const NETWORK_STATES_KEY = 'matornawo_network_states';
+
+const DEFAULT_NETWORK_STATES: NetworkStates = {
+  MTN: 'active',
+  AirtelTigo: 'disabled',
+  Telecel: 'disabled',
+};
+
+const NETWORK_STATE_DESCRIPTIONS: Record<NetworkState, string> = {
+  active: 'Network is active — customers can buy packages',
+  disabled: "Network is disabled — customers see 'Coming Soon'",
+  closed: "Network is closed — customers see 'Store Closed'",
+};
+
+function loadNetworkStates(): NetworkStates {
+  if (typeof window === 'undefined') return DEFAULT_NETWORK_STATES;
+  try {
+    const saved = localStorage.getItem(NETWORK_STATES_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved) as Partial<NetworkStates>;
+      return {
+        MTN: parsed.MTN ?? 'active',
+        AirtelTigo: parsed.AirtelTigo ?? 'disabled',
+        Telecel: parsed.Telecel ?? 'disabled',
+      };
+    }
+    const legacy = localStorage.getItem('networkEnabled');
+    if (legacy) {
+      const old = JSON.parse(legacy) as { AirtelTigo: boolean; Telecel: boolean };
+      return {
+        MTN: 'active',
+        AirtelTigo: old.AirtelTigo ? 'active' : 'disabled',
+        Telecel: old.Telecel ? 'active' : 'disabled',
+      };
+    }
+  } catch {
+    // ignore
+  }
+  return DEFAULT_NETWORK_STATES;
+}
 
 // ADMIN: Password is hardcoded for simplicity (frontend only).
 // For production, move admin auth to a real backend with hashed passwords.
@@ -122,20 +165,51 @@ function ComingSoon({ network }: { network: Network }) {
   );
 }
 
+function StoreClosed({ network }: { network: Network }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-20 px-6">
+      <div className="bg-gray-50 rounded-2xl p-12 max-w-md w-full flex flex-col items-center gap-4 border border-red-100">
+        <div className="w-20 h-20 rounded-full bg-red-50 flex items-center justify-center">
+          <Lock className="w-10 h-10 text-red-400" />
+        </div>
+        <h2 className="text-2xl font-bold text-gray-600">Store Currently Closed</h2>
+        <p className="text-gray-400 text-center text-sm leading-relaxed">
+          Our <span className="font-semibold text-gray-500">{network}</span> store is temporarily closed.
+          Please check back later or contact us on WhatsApp.
+        </p>
+        <button
+          onClick={() =>
+            window.open(
+              'https://wa.me/233534764068?text=Hello%20Matornawo%20Datahub%2C%20I%20need%20help%20with%20my%20order.%20%0A%0AOrder%20ID%3A%20%0ARecipient%20Number%3A%20%0AIssue%3A%20',
+              '_blank'
+            )
+          }
+          className="w-full flex items-center justify-center gap-2 text-white font-semibold text-sm py-2.5 px-4 rounded-xl transition-colors"
+          style={{ backgroundColor: '#25D366' }}
+        >
+          <MessageCircle className="w-4 h-4" />
+          Contact on WhatsApp
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function DataPackages({
   network,
   packages,
   onPackageSelect,
-  networkEnabled,
+  networkState,
 }: {
   network: Network;
   packages: Package[];
   onPackageSelect: (pkg: SelectedPackage) => void;
-  networkEnabled: boolean;
+  networkState: NetworkState;
 }) {
   const networkPackages = packages.filter((p) => p.network === network);
 
-  if (!networkEnabled && network !== 'MTN') return <ComingSoon network={network} />;
+  if (networkState === 'disabled') return <ComingSoon network={network} />;
+  if (networkState === 'closed') return <StoreClosed network={network} />;
   if (networkPackages.length === 0) return <ComingSoon network={network} />;
 
   return (
@@ -453,12 +527,12 @@ function Dashboard({
   showToast,
   onPackageSelect,
   packages,
-  networkEnabled,
+  networkStates,
 }: {
   showToast: (msg: string, variant?: 'success' | 'error' | 'info') => void;
   onPackageSelect: (pkg: SelectedPackage) => void;
   packages: Package[];
-  networkEnabled: { AirtelTigo: boolean; Telecel: boolean };
+  networkStates: NetworkStates;
 }) {
   const [activeNetwork, setActiveNetwork] = useState<Network>('MTN');
 
@@ -536,7 +610,7 @@ function Dashboard({
               network={activeNetwork}
               packages={packages}
               onPackageSelect={onPackageSelect}
-              networkEnabled={activeNetwork === 'MTN' || networkEnabled[activeNetwork]}
+              networkState={networkStates[activeNetwork]}
             />
           </div>
         </div>
@@ -548,11 +622,11 @@ function Dashboard({
 function BuyData({
   onPackageSelect,
   packages,
-  networkEnabled,
+  networkStates,
 }: {
   onPackageSelect: (pkg: SelectedPackage) => void;
   packages: Package[];
-  networkEnabled: { AirtelTigo: boolean; Telecel: boolean };
+  networkStates: NetworkStates;
 }) {
   const [activeNetwork, setActiveNetwork] = useState<Network>('MTN');
 
@@ -566,7 +640,7 @@ function BuyData({
           network={activeNetwork}
           packages={packages}
           onPackageSelect={onPackageSelect}
-          networkEnabled={activeNetwork === 'MTN' || networkEnabled[activeNetwork]}
+          networkState={networkStates[activeNetwork]}
         />
       </div>
     </div>
@@ -685,8 +759,8 @@ function AdminPanel({
   setOrders,
   packages,
   setPackages,
-  networkEnabled,
-  setNetworkEnabled,
+  networkStates,
+  setNetworkStates,
   onLogout,
   showToast,
 }: {
@@ -694,8 +768,8 @@ function AdminPanel({
   setOrders: (orders: Order[]) => void;
   packages: Package[];
   setPackages: (packages: Package[]) => void;
-  networkEnabled: { AirtelTigo: boolean; Telecel: boolean };
-  setNetworkEnabled: (enabled: { AirtelTigo: boolean; Telecel: boolean }) => void;
+  networkStates: NetworkStates;
+  setNetworkStates: React.Dispatch<React.SetStateAction<NetworkStates>>;
   onLogout: () => void;
   showToast: (msg: string, variant?: 'success' | 'error' | 'info') => void;
 }) {
@@ -1035,31 +1109,26 @@ function AdminPanel({
 
       {activeTab === 'networks' && (
         <div className="space-y-4">
-          {['AirtelTigo', 'Telecel'].map((network) => (
-            <div key={network} className="bg-white rounded-lg shadow p-4 flex items-center justify-between">
-              <div>
+          {(['MTN', 'AirtelTigo', 'Telecel'] as Network[]).map((network) => (
+            <div key={network} className="bg-white rounded-lg shadow p-4 flex items-center justify-between gap-4">
+              <div className="flex-1 min-w-0">
                 <h3 className="font-bold text-gray-800">{network}</h3>
-                <p className="text-sm text-gray-600">
-                  {networkEnabled[network as Exclude<Network, 'MTN'>]
-                    ? 'Network is active - customers can see packages'
-                    : 'Network is disabled - customers see "Coming Soon"'}
-                </p>
+                <p className="text-sm text-gray-600">{NETWORK_STATE_DESCRIPTIONS[networkStates[network]]}</p>
               </div>
-              <button
-                onClick={() =>
-                  setNetworkEnabled({
-                    ...networkEnabled,
-                    [network]: !networkEnabled[network as Exclude<Network, 'MTN'>],
+              <select
+                value={networkStates[network]}
+                onChange={(e) =>
+                  setNetworkStates({
+                    ...networkStates,
+                    [network]: e.target.value as NetworkState,
                   })
                 }
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition-colors ${
-                  networkEnabled[network as Exclude<Network, 'MTN'>]
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-gray-100 text-gray-700'
-                }`}
+                className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 text-sm font-semibold text-gray-800 shrink-0"
               >
-                {networkEnabled[network as Exclude<Network, 'MTN'>] ? 'Enabled' : 'Disabled'}
-              </button>
+                <option value="active">Active</option>
+                <option value="disabled">Disabled</option>
+                <option value="closed">Closed</option>
+              </select>
             </div>
           ))}
         </div>
@@ -1155,14 +1224,25 @@ export default function App() {
   const [adminLoggedIn, setAdminLoggedIn] = useState(!!localStorage.getItem('adminLoggedIn'));
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [packages, setPackages] = useState<Package[]>(loadStoredPackages);
-  const [networkEnabled, setNetworkEnabled] = useState<{ AirtelTigo: boolean; Telecel: boolean }>(() => {
-    const saved = localStorage.getItem('networkEnabled');
-    return saved ? JSON.parse(saved) : { AirtelTigo: false, Telecel: false };
-  });
+  const [networkStates, setNetworkStates] = useState<NetworkStates>(loadNetworkStates);
 
   useEffect(() => {
-    localStorage.setItem('networkEnabled', JSON.stringify(networkEnabled));
-  }, [networkEnabled]);
+    localStorage.setItem(NETWORK_STATES_KEY, JSON.stringify(networkStates));
+  }, [networkStates]);
+
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === NETWORK_STATES_KEY && e.newValue) {
+        try {
+          setNetworkStates(JSON.parse(e.newValue) as NetworkStates);
+        } catch {
+          // ignore
+        }
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem(PACKAGES_STORAGE_KEY, JSON.stringify(packages));
@@ -1213,8 +1293,8 @@ export default function App() {
         setOrders={setOrders}
         packages={packages}
         setPackages={setPackages}
-        networkEnabled={networkEnabled}
-        setNetworkEnabled={setNetworkEnabled}
+        networkStates={networkStates}
+        setNetworkStates={setNetworkStates}
         onLogout={handleAdminLogout}
         showToast={showToast}
       />
@@ -1302,10 +1382,10 @@ export default function App() {
         style={{ backgroundColor: '#f3f3f0' }}
       >
         {activePage === 'dashboard' && (
-          <Dashboard showToast={showToast} onPackageSelect={handlePackageSelect} packages={packages} networkEnabled={networkEnabled} />
+          <Dashboard showToast={showToast} onPackageSelect={handlePackageSelect} packages={packages} networkStates={networkStates} />
         )}
         {activePage === 'buy-data' && (
-          <BuyData onPackageSelect={handlePackageSelect} packages={packages} networkEnabled={networkEnabled} />
+          <BuyData onPackageSelect={handlePackageSelect} packages={packages} networkStates={networkStates} />
         )}
         {activePage === 'track-order' && <TrackOrder orders={orders} />}
       </main>
