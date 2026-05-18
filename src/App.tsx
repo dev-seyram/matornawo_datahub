@@ -220,7 +220,7 @@ function DataPackages({
       </div>
       <p className="text-sm text-gray-400 mb-5">Choose your preferred bundle</p>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-3">
         {networkPackages.map((pkg) => {
           const brandColor = network === 'MTN' ? 'bg-amber-400' : network === 'AirtelTigo' ? 'bg-blue-600' : 'bg-red-500';
           const brandTextColor = network === 'MTN' ? 'text-amber-900' : 'text-white';
