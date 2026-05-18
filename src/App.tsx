@@ -71,6 +71,72 @@ interface Order {
   date: string;
 }
 
+type DbOrder = {
+  order_id: string;
+  network: string;
+  package: string;
+  price: number | string;
+  service_fee: number | string;
+  total: number | string;
+  recipient_phone: string;
+  email: string;
+  status: string;
+  created_at: string;
+};
+
+const ORDERS_API = '/api/orders';
+
+function mapDbOrder(row: DbOrder): Order {
+  return {
+    orderId: row.order_id,
+    network: row.network as Network,
+    package: row.package,
+    price: Number(row.price),
+    serviceFee: Number(row.service_fee),
+    total: Number(row.total),
+    recipientPhone: row.recipient_phone,
+    email: row.email,
+    status: row.status as OrderStatus,
+    date: row.created_at,
+  };
+}
+
+async function fetchOrders(): Promise<Order[]> {
+  const res = await fetch(ORDERS_API);
+  if (!res.ok) throw new Error('Failed to fetch orders');
+  const data = (await res.json()) as DbOrder[];
+  return data.map(mapDbOrder);
+}
+
+async function createOrder(order: Order): Promise<Order> {
+  const res = await fetch(ORDERS_API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      order_id: order.orderId,
+      network: order.network,
+      package: order.package,
+      price: order.price,
+      service_fee: order.serviceFee,
+      total: order.total,
+      recipient_phone: order.recipientPhone,
+      email: order.email,
+    }),
+  });
+  if (!res.ok) throw new Error('Failed to save order');
+  return mapDbOrder((await res.json()) as DbOrder);
+}
+
+async function patchOrderStatus(orderId: string, status: OrderStatus): Promise<Order> {
+  const res = await fetch(ORDERS_API, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ order_id: orderId, status }),
+  });
+  if (!res.ok) throw new Error('Failed to update order');
+  return mapDbOrder((await res.json()) as DbOrder);
+}
+
 function getStatusBadgeClass(status: OrderStatus): string {
   switch (status) {
     case 'Pending':
@@ -403,13 +469,13 @@ function BuyModal({
   isOpen,
   onClose,
   selectedPackage,
-  setOrders,
+  onOrderCreated,
   showToast,
 }: {
   isOpen: boolean;
   onClose: () => void;
   selectedPackage: SelectedPackage | null;
-  setOrders: React.Dispatch<React.SetStateAction<Order[]>>;
+  onOrderCreated: (order: Order) => Promise<void>;
   showToast: (msg: string, variant?: 'success' | 'error' | 'info') => void;
 }) {
   const [phone, setPhone] = useState('');
@@ -520,21 +586,20 @@ function BuyModal({
   ) => {
     setProcessing(false);
 
-    setOrders((prev) => [
-      ...prev,
-      {
-        orderId,
-        network: orderNetwork,
-        package: orderPackageSize,
-        price,
-        serviceFee,
-        total,
-        recipientPhone,
-        email,
-        status: 'Pending' as const,
-        date: new Date().toISOString(),
-      },
-    ]);
+    const newOrder: Order = {
+      orderId,
+      network: orderNetwork,
+      package: orderPackageSize,
+      price,
+      serviceFee,
+      total,
+      recipientPhone,
+      email,
+      status: 'Pending',
+      date: new Date().toISOString(),
+    };
+
+    void onOrderCreated(newOrder);
 
     showToast(`✅ Payment Successful! Your ${orderPackageSize} bundle is being sent to ${recipientPhone}`, 'success');
 
@@ -914,7 +979,7 @@ function TrackOrder({ orders }: { orders: Order[] }) {
 
 function AdminPanel({
   orders,
-  setOrders,
+  onUpdateOrderStatus,
   packages,
   setPackages,
   networkStates,
@@ -923,7 +988,7 @@ function AdminPanel({
   showToast,
 }: {
   orders: Order[];
-  setOrders: React.Dispatch<React.SetStateAction<Order[]>>;
+  onUpdateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
   packages: Package[];
   setPackages: React.Dispatch<React.SetStateAction<Package[]>>;
   networkStates: NetworkStates;
@@ -970,8 +1035,7 @@ function AdminPanel({
   const totalRevenue = orders.filter((o) => o.status === 'Delivered').reduce((sum, o) => sum + o.total, 0);
 
   const handleUpdateOrderStatus = (orderId: string, status: OrderStatus) => {
-    setOrders((prev) => prev.map((o) => (o.orderId === orderId ? { ...o, status } : o)));
-    showToast(`Order ${orderId} updated to ${status}`, 'success');
+    void onUpdateOrderStatus(orderId, status);
   };
 
   // FIX: Use functional updater
@@ -1342,6 +1406,33 @@ export default function App() {
     return () => window.removeEventListener('popstate', onPop);
   }, []);
 
+  useEffect(() => {
+    fetchOrders()
+      .then(setOrders)
+      .catch(() => {
+        // Keep empty orders if API is unavailable (e.g. local dev without Vercel)
+      });
+  }, []);
+
+  const handleOrderCreated = async (order: Order) => {
+    try {
+      const saved = await createOrder(order);
+      setOrders((prev) => [...prev, saved]);
+    } catch {
+      setOrders((prev) => [...prev, order]);
+    }
+  };
+
+  const handleUpdateOrderStatus = async (orderId: string, status: OrderStatus) => {
+    setOrders((prev) => prev.map((o) => (o.orderId === orderId ? { ...o, status } : o)));
+    try {
+      await patchOrderStatus(orderId, status);
+      showToast(`Order ${orderId} updated to ${status}`, 'success');
+    } catch {
+      showToast(`Failed to sync order ${orderId} status`, 'error');
+    }
+  };
+
   const showToast = (msg: string, variant: 'success' | 'error' | 'info' = 'success') => {
     setToast({ message: msg, variant });
     setTimeout(() => setToast(null), 4000);
@@ -1375,7 +1466,7 @@ export default function App() {
     return (
       <AdminPanel
         orders={orders}
-        setOrders={setOrders}
+        onUpdateOrderStatus={handleUpdateOrderStatus}
         packages={packages}
         setPackages={setPackages}
         networkStates={networkStates}
@@ -1471,7 +1562,7 @@ export default function App() {
         isOpen={showModal}
         onClose={() => setShowModal(false)}
         selectedPackage={selectedPackage}
-        setOrders={setOrders}
+        onOrderCreated={handleOrderCreated}
         showToast={showToast}
       />
 
