@@ -1654,11 +1654,9 @@ function AdminPanel({
 
   orders: Order[];
 
-  setOrders: (orders: Order[]) => void;
-
+setOrders: React.Dispatch<React.SetStateAction<Order[]>>;
   packages: Package[];
-
-  setPackages: (packages: Package[]) => void;
+  setPackages: React.Dispatch<React.SetStateAction<Package[]>>;
 
   networkStates: NetworkStates;
 
