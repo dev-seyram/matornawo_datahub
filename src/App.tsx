@@ -2455,15 +2455,13 @@ const PACKAGES_STORAGE_KEY = 'matornawo_packages';
 
 
 function getInitialPage(): Page {
-
-  if (typeof window !== 'undefined' && window.location.pathname.replace(/\/+$/, '').toLowerCase() === '/admin') {
-
-    return 'admin';
-
+  if (typeof window !== 'undefined') {
+    const path = window.location.pathname.replace(/\/+$/, '').toLowerCase();
+    if (path === '/admin' || path === '/dev_seyram') {
+      return 'admin';
+    }
   }
-
   return 'dashboard';
-
 }
 
 
