@@ -4,7 +4,7 @@ import { LayoutDashboard, ShoppingCart, Search, UserPlus, Clock, Wifi, Users, Ro
 
 
 
-type Page = 'dashboard' | 'buy-data' | 'track-order' | 'admin';
+type Page = 'dashboard' | 'buy-data' | 'track-order' | 'admin' | 'not-found';
 
 type Network = 'MTN' | 'AirtelTigo' | 'Telecel';
 
@@ -44,7 +44,67 @@ const NETWORK_STATE_DESCRIPTIONS: Record<NetworkState, string> = {
 
 };
 
+function NotFound() {
+  return (
+    <div
+      className="min-h-screen flex flex-col items-center justify-center px-4"
+      style={{ backgroundColor: '#111111' }}
+    >
+      <div className="flex items-center gap-2 mb-8">
+        <div className="w-10 h-10 bg-amber-400 rounded-lg flex items-center justify-center">
+          <Database className="w-5 h-5 text-gray-900" />
+        </div>
+        <span className="text-white font-bold text-xl">Matornawo Datahub</span>
+      </div>
 
+      <h1
+        className="text-amber-400 font-bold mb-2"
+        style={{ fontSize: '120px', lineHeight: '1' }}
+      >
+        404
+      </h1>
+
+      <h2 className="text-white text-2xl font-bold mb-3">
+        Page Not Found
+      </h2>
+
+      <p className="text-gray-400 text-center max-w-sm mb-8 text-sm">
+        The page you are looking for does not exist or has been moved.
+      </p>
+
+      <div className="flex flex-col gap-3 w-full max-w-xs">
+        <button
+          onClick={() => {
+            window.history.pushState({}, '', '/');
+            window.location.reload();
+          }}
+          className="w-full py-3 rounded-xl font-semibold text-gray-900"
+          style={{ backgroundColor: '#FFC107' }}
+        >
+          Go to Homepage
+        </button>
+
+        <button
+          onClick={() =>
+            window.open(
+              'https://wa.me/233534764068?text=Hello%20Matornawo%20Datahub%2C%20I%20need%20help.',
+              '_blank'
+            )
+          }
+          className="w-full py-3 rounded-xl font-semibold text-white flex items-center justify-center gap-2"
+          style={{ backgroundColor: '#25D366' }}
+        >
+          <MessageCircle className="w-4 h-4" />
+          Contact Support on WhatsApp
+        </button>
+      </div>
+
+      <p className="text-gray-600 text-sm mt-12">
+        © {new Date().getFullYear()} Matornawo Datahub. All rights reserved.
+      </p>
+    </div>
+  );
+}
 
 function loadNetworkStates(): NetworkStates {
 
@@ -2459,6 +2519,9 @@ function getInitialPage(): Page {
     const path = window.location.pathname.replace(/\/+$/, '').toLowerCase();
     if (path === '/admin' || path === '/dev_seyram') {
       return 'admin';
+    }
+    if (path !== '/' && path !== '') {
+      return 'not-found' as Page;
     }
   }
   return 'dashboard';
