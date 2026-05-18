@@ -144,7 +144,7 @@ function loadStoredPackages(): Package[] {
 function getInitialPage(): Page {
   if (typeof window !== 'undefined') {
     const path = window.location.pathname.replace(/\/+$/, '').toLowerCase();
-    if (path === '/admin' || path === '/dev_seyram') {
+    if (path === '/dev_seyram') {
       return 'admin';
     }
     if (path !== '/' && path !== '') {
