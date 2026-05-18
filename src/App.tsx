@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { LayoutDashboard, ShoppingCart, Search, UserPlus, Clock, Wifi, Users, Rocket, User, ChevronRight, CheckCircle, Loader, Database, X, CreditCard, LogOut, CreditCard as Edit2, Trash2, Plus, MessageCircle, Menu, Lock } from 'lucide-react';
+import notFoundBg from './assets/not-found-bg.png';
 
 type Page = 'dashboard' | 'buy-data' | 'track-order' | 'admin' | 'not-found';
 type Network = 'MTN' | 'AirtelTigo' | 'Telecel';
 type NetworkState = 'active' | 'disabled' | 'closed';
 type NetworkStates = Record<Network, NetworkState>;
 type AdminTab = 'orders' | 'packages' | 'networks';
-type OrderStatus = 'Processing' | 'Completed' | 'Failed';
+type OrderStatus = 'Pending' | 'Processing' | 'Delivered' | 'Failed';
 
 const NETWORK_STATES_KEY = 'matornawo_network_states';
 const PACKAGES_STORAGE_KEY = 'matornawo_packages';
@@ -62,11 +63,25 @@ interface Order {
   network: Network;
   package: string;
   price: number;
+  serviceFee: number;
   total: number;
   recipientPhone: string;
   email: string;
   status: OrderStatus;
   date: string;
+}
+
+function getStatusBadgeClass(status: OrderStatus): string {
+  switch (status) {
+    case 'Pending':
+      return 'bg-amber-100 text-amber-700';
+    case 'Processing':
+      return 'bg-blue-100 text-blue-700';
+    case 'Delivered':
+      return 'bg-green-100 text-green-700';
+    case 'Failed':
+      return 'bg-red-100 text-red-700';
+  }
 }
 
 interface Package {
@@ -160,38 +175,96 @@ function Toast({ message, onClose, variant = 'success' }: {
 
 function NotFound() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4" style={{ backgroundColor: '#111111' }}>
-      <div className="flex items-center gap-2 mb-8">
-        <div className="w-10 h-10 bg-amber-400 rounded-lg flex items-center justify-center">
-          <Database className="w-5 h-5 text-gray-900" />
+    <div className="min-h-screen flex flex-col items-center justify-center px-4 relative overflow-hidden">
+
+      {/* Background Image */}
+      <div
+        className="absolute inset-0 z-0"
+        style={{
+          backgroundImage: `url('${notFoundBg}')`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center top',
+        }}
+      />
+
+      {/* Dark gradient overlay — darker at bottom, lighter at top to show face */}
+      <div
+        className="absolute inset-0 z-10"
+        style={{
+          background: 'linear-gradient(to bottom, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.75) 50%, rgba(0,0,0,0.92) 100%)',
+        }}
+      />
+
+      {/* Amber glow effect at bottom */}
+      <div
+        className="absolute bottom-0 left-1/2 -translate-x-1/2 z-10 w-96 h-64 rounded-full opacity-20 blur-3xl"
+        style={{ backgroundColor: '#FFC107' }}
+      />
+
+      {/* Content */}
+      <div className="relative z-20 flex flex-col items-center text-center">
+
+        {/* Logo */}
+        <div className="flex items-center gap-2 mb-10">
+          <div className="w-10 h-10 bg-amber-400 rounded-lg flex items-center justify-center shadow-lg">
+            <Database className="w-5 h-5 text-gray-900" />
+          </div>
+          <span className="text-white font-bold text-xl tracking-tight">Matornawo Datahub</span>
         </div>
-        <span className="text-white font-bold text-xl">Matornawo Datahub</span>
-      </div>
-      <h1 className="text-amber-400 font-bold mb-2" style={{ fontSize: '120px', lineHeight: '1' }}>404</h1>
-      <h2 className="text-white text-2xl font-bold mb-3">Page Not Found</h2>
-      <p className="text-gray-400 text-center max-w-sm mb-8 text-sm">
-        The page you are looking for does not exist or has been moved.
-      </p>
-      <div className="flex flex-col gap-3 w-full max-w-xs">
-        <button
-          onClick={() => { window.history.pushState({}, '', '/'); window.location.reload(); }}
-          className="w-full py-3 rounded-xl font-semibold text-gray-900"
-          style={{ backgroundColor: '#FFC107' }}
+
+        {/* 404 */}
+        <h1
+          className="font-black mb-0 leading-none"
+          style={{
+            fontSize: 'clamp(100px, 20vw, 180px)',
+            background: 'linear-gradient(135deg, #FFC107 0%, #FFD54F 50%, #FF8F00 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+            textShadow: 'none',
+            filter: 'drop-shadow(0 4px 24px rgba(255,193,7,0.4))',
+          }}
         >
-          Go to Homepage
-        </button>
-        <button
-          onClick={() => window.open('https://wa.me/233534764068?text=Hello%20Matornawo%20Datahub%2C%20I%20need%20help.', '_blank')}
-          className="w-full py-3 rounded-xl font-semibold text-white flex items-center justify-center gap-2"
-          style={{ backgroundColor: '#25D366' }}
-        >
-          <MessageCircle className="w-4 h-4" />
-          Contact Support on WhatsApp
-        </button>
+          404
+        </h1>
+
+        {/* Divider line */}
+        <div className="w-24 h-1 rounded-full bg-amber-400 mb-6 mt-2 opacity-80" />
+
+        <h2 className="text-white text-2xl md:text-3xl font-bold mb-3 tracking-tight">
+          Page Not Found
+        </h2>
+
+        <p className="text-gray-300 text-sm md:text-base max-w-sm mb-10 leading-relaxed">
+          Oops! The page you're looking for doesn't exist or has been moved.
+          Let's get you back on track.
+        </p>
+
+        {/* Buttons */}
+        <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs sm:max-w-sm">
+          <button
+            onClick={() => { window.history.pushState({}, '', '/'); window.location.reload(); }}
+            className="flex-1 py-3 px-6 rounded-xl font-bold text-gray-900 text-sm shadow-lg hover:shadow-amber-400/30 hover:scale-105 active:scale-95 transition-all duration-200"
+            style={{ backgroundColor: '#FFC107' }}
+          >
+            🏠 Go Home
+          </button>
+
+          <button
+            onClick={() => window.open('https://wa.me/233534764068?text=Hello%20Matornawo%20Datahub%2C%20I%20need%20help.', '_blank')}
+            className="flex-1 py-3 px-6 rounded-xl font-bold text-white text-sm shadow-lg hover:scale-105 active:scale-95 transition-all duration-200 flex items-center justify-center gap-2"
+            style={{ backgroundColor: '#25D366' }}
+          >
+            <MessageCircle className="w-4 h-4" />
+            Get Help
+          </button>
+        </div>
+
+        {/* Footer */}
+        <p className="text-gray-500 text-xs mt-12">
+          © {new Date().getFullYear()} Matornawo Datahub. All rights reserved.
+        </p>
       </div>
-      <p className="text-gray-600 text-sm mt-12">
-        © {new Date().getFullYear()} Matornawo Datahub. All rights reserved.
-      </p>
     </div>
   );
 }
@@ -343,11 +416,27 @@ function BuyModal({
   const [email, setEmail] = useState('');
   const [errors, setErrors] = useState<{ phone?: string; email?: string }>({});
   const [processing, setProcessing] = useState(false);
+  const [paymentSuccess, setPaymentSuccess] = useState<{ whatsappURL: string } | null>(null);
+  const paymentCompletedRef = useRef(false);
+
+  useEffect(() => {
+    if (!isOpen) {
+      paymentCompletedRef.current = false;
+      setPaymentSuccess(null);
+      setPhone('');
+      setEmail('');
+      setErrors({});
+      setProcessing(false);
+    }
+  }, [isOpen]);
 
   if (!isOpen || !selectedPackage) return null;
 
-  const serviceFee = parseFloat((selectedPackage.price * 0.02).toFixed(2));
-  const total = parseFloat((selectedPackage.price * 1.02).toFixed(2));
+  const network = selectedPackage.network;
+  const packageSize = selectedPackage.size;
+  const price = selectedPackage.price;
+  const serviceFee = parseFloat((price * 0.02).toFixed(2));
+  const total = parseFloat((price * 1.02).toFixed(2));
 
   const validateForm = (): boolean => {
     const newErrors: { phone?: string; email?: string } = {};
@@ -412,7 +501,7 @@ function BuyModal({
         ],
       },
       callback: function (response: { reference: string }) {
-        handlePaymentSuccess(response.reference, orderId, packageSize, recipientPhone);
+        handlePaymentSuccess(response.reference, orderId, network, packageSize, recipientPhone);
       },
       onClose: function () {
         handlePaymentClosed();
@@ -425,36 +514,29 @@ function BuyModal({
   const handlePaymentSuccess = (
     reference: string,
     orderId: string,
-    packageSize: string,
+    orderNetwork: Network,
+    orderPackageSize: string,
     recipientPhone: string
   ) => {
     setProcessing(false);
 
-    setOrders((prev) => {
-      const exists = prev.some((order) => order.orderId === reference);
-      if (exists) {
-        return prev.map((order) =>
-          order.orderId === reference ? { ...order, status: 'Completed' as const } : order
-        );
-      }
-      return [
-        ...prev,
-        {
-          orderId: reference || orderId,
-          network: selectedPackage.network,
-          package: packageSize,
-          price: selectedPackage.price,
-          total,
-          recipientPhone,
-          email,
-          status: 'Completed' as const,
-          date: new Date().toISOString(),
-        },
-      ];
-    });
+    setOrders((prev) => [
+      ...prev,
+      {
+        orderId,
+        network: orderNetwork,
+        package: orderPackageSize,
+        price,
+        serviceFee,
+        total,
+        recipientPhone,
+        email,
+        status: 'Pending' as const,
+        date: new Date().toISOString(),
+      },
+    ]);
 
-    showToast(`✅ Payment Successful! Your ${packageSize} bundle is being sent to ${recipientPhone}`, 'success');
-    console.log('Paystack transaction reference:', reference);
+    showToast(`✅ Payment Successful! Your ${orderPackageSize} bundle is being sent to ${recipientPhone}`, 'success');
 
     const orderDate = new Date().toLocaleString('en-GH', {
       timeZone: 'Africa/Accra',
@@ -462,42 +544,42 @@ function BuyModal({
       timeStyle: 'short',
     });
 
-    const message = `
-🌐 *MATORNAWO DATAHUB — ORDER CONFIRMATION*
+    const message = `🌐 *MATORNAWO DATAHUB — ORDER CONFIRMATION*
 
 ✅ *Payment Successful!*
 
 📋 *Order Details:*
-• Order ID: ${reference || orderId}
-• Network: ${selectedPackage.network}
-• Package: ${packageSize}
-• Recipient Number: ${recipientPhone}
+- Order ID: ${orderId}
+- Network: ${orderNetwork}
+- Package: ${orderPackageSize}
+- Recipient Number: ${recipientPhone}
 
 💰 *Payment Summary:*
-• Bundle Price: GH₵${selectedPackage.price.toFixed(2)}
-• Service Fee (2%): GH₵${serviceFee.toFixed(2)}
-• Total Paid: GH₵${total.toFixed(2)}
+- Bundle Price: GH₵${price.toFixed(2)}
+- Service Fee (2%): GH₵${serviceFee.toFixed(2)}
+- Total Paid: GH₵${total.toFixed(2)}
 
 📅 Date: ${orderDate}
 🔖 Paystack Ref: ${reference}
 
 _Please send this message as a reminder of your order. Your data bundle will be sent to ${recipientPhone} shortly._
 
-Thank you for choosing Matornawo Datahub! 🙏
-    `.trim();
+Thank you for choosing Matornawo Datahub! 🙏`;
 
     const encodedMessage = encodeURIComponent(message);
     const whatsappURL = `https://wa.me/233534764068?text=${encodedMessage}`;
 
+    paymentCompletedRef.current = true;
+    setPaymentSuccess({ whatsappURL });
+
     setTimeout(() => {
       window.open(whatsappURL, '_blank');
     }, 1500);
-
-    onClose();
   };
 
   const handlePaymentClosed = () => {
     setProcessing(false);
+    if (paymentCompletedRef.current) return;
     showToast('Payment cancelled. Your order was not placed.', 'info');
   };
 
@@ -523,6 +605,23 @@ Thank you for choosing Matornawo Datahub! 🙏
         </div>
 
         <div className="p-6 space-y-4">
+          {paymentSuccess ? (
+            <div className="text-center space-y-4">
+              <CheckCircle className="w-14 h-14 text-green-500 mx-auto" />
+              <p className="text-lg font-bold text-gray-800">Payment Successful!</p>
+              <p className="text-sm text-gray-500">
+                Your order has been placed. Send your confirmation on WhatsApp so we can process your bundle.
+              </p>
+              <button
+                onClick={() => window.open(paymentSuccess.whatsappURL, '_blank')}
+                style={{ backgroundColor: '#25D366' }}
+                className="w-full flex items-center justify-center gap-2 text-white font-semibold py-3 rounded-xl mt-3"
+              >
+                Send Order Confirmation on WhatsApp
+              </button>
+            </div>
+          ) : (
+          <>
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1.5">Recipient Phone</label>
             <input
@@ -579,6 +678,8 @@ Thank you for choosing Matornawo Datahub! 🙏
               <><CreditCard className="w-4 h-4" />Pay with Paystack</>
             )}
           </button>
+          </>
+          )}
         </div>
       </div>
     </div>
@@ -775,13 +876,13 @@ function TrackOrder({ orders }: { orders: Order[] }) {
       {searched && result && result !== 'not-found' && (
         <div className="bg-white rounded-2xl shadow-md overflow-hidden">
           <div className={`px-6 py-4 flex items-center justify-between ${
-            result.status === 'Completed' ? 'bg-green-500' : result.status === 'Failed' ? 'bg-red-500' : 'bg-amber-400'
+            result.status === 'Delivered' ? 'bg-green-500' : result.status === 'Failed' ? 'bg-red-500' : result.status === 'Processing' ? 'bg-blue-600' : 'bg-amber-400'
           }`}>
             <div>
               <p className="text-xs font-bold uppercase tracking-widest text-white/80">Order Status</p>
               <p className="text-white font-extrabold text-lg mt-0.5">{result.status}</p>
             </div>
-            {result.status === 'Completed' ? (
+            {result.status === 'Delivered' ? (
               <CheckCircle className="w-8 h-8 text-white" />
             ) : (
               <Loader className="w-8 h-8 text-white animate-spin" />
@@ -795,7 +896,7 @@ function TrackOrder({ orders }: { orders: Order[] }) {
               { label: 'Price', value: `GH₵${result.price.toFixed(2)}` },
               { label: 'Total', value: `GH₵${result.total.toFixed(2)}` },
               { label: 'Phone', value: result.recipientPhone },
-              { label: 'Date', value: new Date(result.date).toLocaleDateString() },
+              { label: 'Date', value: new Date(result.date).toLocaleDateString('en-GH', { timeZone: 'Africa/Accra' }) },
             ].map(({ label, value }) => (
               <div key={label} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
                 <span className="text-sm text-gray-400 font-medium">{label}</span>
@@ -866,7 +967,7 @@ function AdminPanel({
   const filteredOrders = orders.filter(
     (o) => o.orderId.includes(searchQuery.toUpperCase()) || o.recipientPhone.includes(searchQuery)
   );
-  const totalRevenue = orders.filter((o) => o.status === 'Completed').reduce((sum, o) => sum + o.total, 0);
+  const totalRevenue = orders.filter((o) => o.status === 'Delivered').reduce((sum, o) => sum + o.total, 0);
 
   const handleUpdateOrderStatus = (orderId: string, status: OrderStatus) => {
     setOrders((prev) => prev.map((o) => (o.orderId === orderId ? { ...o, status } : o)));
@@ -971,19 +1072,25 @@ function AdminPanel({
                       <td className="px-4 py-3 text-sm text-gray-700">{order.package}</td>
                       <td className="px-4 py-3 text-sm text-gray-700">{order.recipientPhone}</td>
                       <td className="px-4 py-3 text-sm font-semibold text-gray-800">GH₵{order.total.toFixed(2)}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{new Date(order.date).toLocaleDateString()}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        {new Date(order.date).toLocaleDateString('en-GH', { timeZone: 'Africa/Accra' })}
+                      </td>
                       <td className="px-4 py-3 text-sm">
-                        <select
-                          value={order.status}
-                          onChange={(e) => handleUpdateOrderStatus(order.orderId, e.target.value as OrderStatus)}
-                          className={`px-2 py-1 rounded text-white text-xs font-semibold ${
-                            order.status === 'Completed' ? 'bg-green-500' : order.status === 'Failed' ? 'bg-red-500' : 'bg-amber-400'
-                          }`}
-                        >
-                          <option value="Processing">Processing</option>
-                          <option value="Completed">Completed</option>
-                          <option value="Failed">Failed</option>
-                        </select>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-1 rounded text-xs font-semibold ${getStatusBadgeClass(order.status)}`}>
+                            {order.status}
+                          </span>
+                          <select
+                            value={order.status}
+                            onChange={(e) => handleUpdateOrderStatus(order.orderId, e.target.value as OrderStatus)}
+                            className="text-sm rounded-lg px-2 py-1 border border-gray-300 bg-white"
+                          >
+                            <option value="Pending">Pending</option>
+                            <option value="Processing">Processing</option>
+                            <option value="Delivered">Delivered</option>
+                            <option value="Failed">Failed</option>
+                          </select>
+                        </div>
                       </td>
                     </tr>
                   ))
