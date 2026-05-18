@@ -1196,7 +1196,7 @@ function AdminLogin({ onLogin }: { onLogin: () => void; showToast: (msg: string,
 const PACKAGES_STORAGE_KEY = 'matornawo_packages';
 
 function getInitialPage(): Page {
-  if (typeof window !== 'undefined' && window.location.pathname.replace(/\/+$/, '').toLowerCase() === '/admin') {
+  if (typeof window !== 'undefined' && window.location.pathname.replace(/\/+$/, '').toLowerCase() === '/dev_seyram') {
     return 'admin';
   }
   return 'dashboard';
