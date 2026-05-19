@@ -171,27 +171,6 @@ interface SelectedPackage {
   network: Network;
 }
 
-const DEFAULT_MTN_PACKAGES: Package[] = [
-  { id: 'mtn-1', size: '1GB', price: 4.5, validity: 'Non Expiry', network: 'MTN' },
-  { id: 'mtn-2', size: '2GB', price: 9.0, validity: 'Non Expiry', network: 'MTN' },
-  { id: 'mtn-3', size: '3GB', price: 13.0, validity: 'Non Expiry', network: 'MTN' },
-  { id: 'mtn-4', size: '4GB', price: 17.0, validity: 'Non Expiry', network: 'MTN' },
-  { id: 'mtn-5', size: '5GB', price: 21.0, validity: 'Non Expiry', network: 'MTN' },
-  { id: 'mtn-6', size: '6GB', price: 25.0, validity: 'Non Expiry', network: 'MTN' },
-  { id: 'mtn-7', size: '7GB', price: 29.0, validity: 'Non Expiry', network: 'MTN' },
-  { id: 'mtn-8', size: '8GB', price: 33.5, validity: 'Non Expiry', network: 'MTN' },
-  { id: 'mtn-9', size: '9GB', price: 38.0, validity: 'Non Expiry', network: 'MTN' },
-  { id: 'mtn-10', size: '10GB', price: 40.0, validity: 'Non Expiry', network: 'MTN' },
-  { id: 'mtn-12', size: '12GB', price: 49.0, validity: 'Non Expiry', network: 'MTN' },
-  { id: 'mtn-15', size: '15GB', price: 60.0, validity: 'Non Expiry', network: 'MTN' },
-  { id: 'mtn-20', size: '20GB', price: 80.0, validity: 'Non Expiry', network: 'MTN' },
-  { id: 'mtn-25', size: '25GB', price: 98.0, validity: 'Non Expiry', network: 'MTN' },
-  { id: 'mtn-30', size: '30GB', price: 112.0, validity: 'Non Expiry', network: 'MTN' },
-  { id: 'mtn-40', size: '40GB', price: 156.0, validity: 'Non Expiry', network: 'MTN' },
-  { id: 'mtn-50', size: '50GB', price: 190.0, validity: 'Non Expiry', network: 'MTN' },
-  { id: 'mtn-100', size: '100GB', price: 379.0, validity: 'Non Expiry', network: 'MTN' },
-];
-
 const generateOrderId = () => {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let id = 'ORD-';
@@ -222,16 +201,16 @@ function mapDbPackage(row: DbPackage): Package {
 }
 
 function loadCachedPackages(): Package[] {
-  if (typeof window === 'undefined') return DEFAULT_MTN_PACKAGES;
+  if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(PACKAGES_STORAGE_KEY);
-    if (!raw) return DEFAULT_MTN_PACKAGES;
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) return parsed as Package[];
   } catch {
     // ignore
   }
-  return DEFAULT_MTN_PACKAGES;
+  return [];
 }
 
 function getInitialPage(): Page {
@@ -905,7 +884,7 @@ function BuyData({
 
 // ─── TRACK ORDER ──────────────────────────────────────────────────────────────
 
-function TrackOrder({ orders }: { orders: Order[] }) {
+function TrackOrder() {
   const [orderId, setOrderId] = useState('');
   const [result, setResult] = useState<Order | 'not-found' | null>(null);
   const [searched, setSearched] = useState(false);
@@ -920,8 +899,7 @@ function TrackOrder({ orders }: { orders: Order[] }) {
       })
       .catch((err) => {
         console.error('Failed to fetch order for tracking:', err);
-        const found = orders.find((o) => o.orderId === key);
-        setResult(found ?? 'not-found');
+        setResult('not-found');
       });
   };
 
@@ -1445,7 +1423,7 @@ export default function App() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [adminLoggedIn, setAdminLoggedIn] = useState(!!localStorage.getItem('adminLoggedIn'));
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [packages, setPackages] = useState<Package[]>(DEFAULT_MTN_PACKAGES);
+  const [packages, setPackages] = useState<Package[]>([]);
   const packagesHydratedRef = useRef(false);
   const [networkStates, setNetworkStates] = useState<NetworkStates>(loadNetworkStates);
 
@@ -1468,7 +1446,7 @@ export default function App() {
       .then((res) => res.json())
       .then((data: DbPackage[]) => {
         packagesHydratedRef.current = true;
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           setPackages(data.map(mapDbPackage));
         }
       })
@@ -1505,7 +1483,6 @@ export default function App() {
       setOrders((prev) => [...prev, saved]);
     } catch (err) {
       console.error('Failed to save order to database:', err);
-      setOrders((prev) => [...prev, order]);
     }
   };
 
@@ -1641,7 +1618,7 @@ export default function App() {
         {activePage === 'buy-data' && (
           <BuyData onPackageSelect={handlePackageSelect} packages={packages} networkStates={networkStates} />
         )}
-        {activePage === 'track-order' && <TrackOrder orders={orders} />}
+        {activePage === 'track-order' && <TrackOrder />}
       </main>
 
       <BuyModal
