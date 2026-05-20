@@ -1,4 +1,5 @@
 import { neon } from '@neondatabase/serverless';
+import { setCorsHeaders, requireAdmin } from '../lib/adminAuth.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
@@ -21,9 +22,7 @@ async function initDB() {
 }
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  setCorsHeaders(req, res);
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -44,6 +43,7 @@ export default async function handler(req, res) {
         }
         return res.status(200).json(rows[0]);
       }
+      if (!requireAdmin(req, res)) return;
       const orders = await sql`SELECT * FROM orders ORDER BY created_at DESC`;
       return res.status(200).json(orders);
     }
@@ -59,6 +59,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'PATCH') {
+      if (!requireAdmin(req, res)) return;
       const { order_id, status } = req.body;
       const result = await sql`
         UPDATE orders SET status = ${status} WHERE order_id = ${order_id} RETURNING *
