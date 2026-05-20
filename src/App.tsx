@@ -51,9 +51,6 @@ function loadNetworkStates(): NetworkStates {
   return DEFAULT_NETWORK_STATES;
 }
 
-// ADMIN: Password is hardcoded for simplicity (frontend only).
-// For production, move admin auth to a real backend with hashed passwords.
-
 // PAYSTACK: Only PUBLIC key (pk_...) belongs in frontend code.
 // SECRET key (sk_...) must NEVER appear in frontend — backend use only.
 // pk_test_... → testing | pk_live_... → production
@@ -85,6 +82,13 @@ type DbOrder = {
 };
 
 const ORDERS_API = '/api/orders';
+const ADMIN_LOGIN_API = '/api/admin/login';
+const ADMIN_LOGOUT_API = '/api/admin/logout';
+const ADMIN_SESSION_API = '/api/admin/session';
+
+function adminFetch(input: string, init?: RequestInit) {
+  return fetch(input, { ...init, credentials: 'include' });
+}
 
 function mapDbOrder(row: DbOrder): Order {
   return {
@@ -102,7 +106,7 @@ function mapDbOrder(row: DbOrder): Order {
 }
 
 async function fetchOrders(): Promise<Order[]> {
-  const res = await fetch(ORDERS_API);
+  const res = await adminFetch(ORDERS_API);
   if (!res.ok) throw new Error('Failed to fetch orders');
   const data = (await res.json()) as DbOrder[];
   return data.map(mapDbOrder);
@@ -135,7 +139,7 @@ async function createOrder(order: Order): Promise<Order> {
 }
 
 async function patchOrderStatus(orderId: string, status: OrderStatus): Promise<Order> {
-  const res = await fetch(ORDERS_API, {
+  const res = await adminFetch(ORDERS_API, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ order_id: orderId, status }),
@@ -1032,7 +1036,7 @@ function AdminPanel({
     if (!size) { setEditError('Size is required'); return; }
     if (!validity) { setEditError('Validity is required'); return; }
     if (isNaN(price) || price <= 0) { setEditError('Price must be a number greater than 0'); return; }
-    fetch(PACKAGES_API, {
+    adminFetch(PACKAGES_API, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ package_id: id, size, validity, price }),
@@ -1061,7 +1065,7 @@ function AdminPanel({
 
   const handleDeletePackage = (id: string) => {
     if (!confirm('Are you sure you want to delete this package?')) return;
-    fetch(PACKAGES_API, {
+    adminFetch(PACKAGES_API, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ package_id: id }),
@@ -1085,7 +1089,7 @@ function AdminPanel({
     const size = newPackageForm.size;
     const validity = newPackageForm.validity;
     const price = parseFloat(newPackageForm.price);
-    fetch(PACKAGES_API, {
+    adminFetch(PACKAGES_API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1365,17 +1369,31 @@ function AdminPanel({
 function AdminLogin({ onLogin }: { onLogin: () => void; showToast?: (msg: string, variant?: 'success' | 'error' | 'info') => void }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const handleLogin = () => {
-    if (password === 'matornawo2024admin') {
-      onLogin();
-      localStorage.setItem('adminLoggedIn', 'true');
-      setPassword('');
-      setError('');
-    } else {
-      setError('Incorrect password. Access denied.');
-      setPassword('');
-    }
+    if (!password || submitting) return;
+    setSubmitting(true);
+    setError('');
+    void adminFetch(ADMIN_LOGIN_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    })
+      .then((res) => {
+        if (!res.ok) {
+          setError('Incorrect password. Access denied.');
+          setPassword('');
+          return;
+        }
+        onLogin();
+        setPassword('');
+      })
+      .catch(() => {
+        setError('Unable to sign in. Try again later.');
+        setPassword('');
+      })
+      .finally(() => setSubmitting(false));
   };
 
   return (
@@ -1403,9 +1421,10 @@ function AdminLogin({ onLogin }: { onLogin: () => void; showToast?: (msg: string
           </div>
           <button
             onClick={handleLogin}
-            className="w-full bg-amber-400 hover:bg-amber-300 text-gray-900 font-bold py-2.5 rounded-lg transition-colors"
+            disabled={submitting}
+            className="w-full bg-amber-400 hover:bg-amber-300 disabled:opacity-60 text-gray-900 font-bold py-2.5 rounded-lg transition-colors"
           >
-            Login
+            {submitting ? 'Signing in…' : 'Login'}
           </button>
         </div>
       </div>
@@ -1421,7 +1440,8 @@ export default function App() {
   const [selectedPackage, setSelectedPackage] = useState<SelectedPackage | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [adminLoggedIn, setAdminLoggedIn] = useState(!!localStorage.getItem('adminLoggedIn'));
+  const [adminLoggedIn, setAdminLoggedIn] = useState(false);
+  const [adminAuthChecked, setAdminAuthChecked] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [packages, setPackages] = useState<Package[]>([]);
   const packagesHydratedRef = useRef(false);
@@ -1469,12 +1489,23 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (activePage !== 'admin') return;
+    setAdminAuthChecked(false);
+    adminFetch(ADMIN_SESSION_API)
+      .then((res) => setAdminLoggedIn(res.ok))
+      .catch(() => setAdminLoggedIn(false))
+      .finally(() => setAdminAuthChecked(true));
+  }, [activePage]);
+
+  useEffect(() => {
+    if (!adminLoggedIn) {
+      setOrders([]);
+      return;
+    }
     fetchOrders()
       .then(setOrders)
-      .catch(() => {
-        // Keep empty orders if API is unavailable (e.g. local dev without Vercel)
-      });
-  }, []);
+      .catch(() => setOrders([]));
+  }, [adminLoggedIn]);
 
   const handleOrderCreated = async (order: Order) => {
     try {
@@ -1507,10 +1538,12 @@ export default function App() {
   };
 
   const handleAdminLogout = () => {
-    setAdminLoggedIn(false);
-    localStorage.removeItem('adminLoggedIn');
-    setActivePage('dashboard');
-    window.history.pushState({}, '', '/');
+    void adminFetch(ADMIN_LOGOUT_API, { method: 'POST' }).finally(() => {
+      setAdminLoggedIn(false);
+      setOrders([]);
+      setActivePage('dashboard');
+      window.history.pushState({}, '', '/');
+    });
   };
 
   const navItems: { id: Exclude<Page, 'admin' | 'not-found'>; label: string; icon: React.ReactNode }[] = [
@@ -1523,6 +1556,13 @@ export default function App() {
   if (activePage === 'not-found') return <NotFound />;
 
   if (activePage === 'admin') {
+    if (!adminAuthChecked) {
+      return (
+        <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+          <Loader className="w-8 h-8 text-amber-400 animate-spin" />
+        </div>
+      );
+    }
     if (!adminLoggedIn) {
       return <AdminLogin onLogin={() => setAdminLoggedIn(true)} />;
     }

@@ -1,4 +1,5 @@
 import { neon } from '@neondatabase/serverless';
+import { setCorsHeaders, requireAdmin } from '../lib/adminAuth.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
@@ -18,9 +19,7 @@ async function initDB() {
 }
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  setCorsHeaders(req, res);
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -39,6 +38,7 @@ export default async function handler(req, res) {
 
     // POST - add new package from admin panel
     if (req.method === 'POST') {
+      if (!requireAdmin(req, res)) return;
       const { package_id, network, size, validity, price } = req.body;
       const result = await sql`
         INSERT INTO packages (package_id, network, size, validity, price)
@@ -50,6 +50,7 @@ export default async function handler(req, res) {
 
     // PATCH - update existing package price or details from admin panel
     if (req.method === 'PATCH') {
+      if (!requireAdmin(req, res)) return;
       const { package_id, size, validity, price } = req.body;
       const result = await sql`
         UPDATE packages
@@ -62,6 +63,7 @@ export default async function handler(req, res) {
 
     // DELETE - remove a package from admin panel
     if (req.method === 'DELETE') {
+      if (!requireAdmin(req, res)) return;
       const { package_id } = req.body;
       await sql`DELETE FROM packages WHERE package_id = ${package_id}`;
       return res.status(200).json({ success: true });
