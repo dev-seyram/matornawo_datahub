@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
-import { LayoutDashboard, ShoppingCart, Search, UserPlus, Clock, Wifi, Users, Rocket, User, ChevronRight, CheckCircle, Loader, Database, X, CreditCard, LogOut, CreditCard as Edit2, Trash2, Plus, MessageCircle, Menu, Lock } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Search, UserPlus, Clock, Wifi, Users, Rocket, User, ChevronRight, CheckCircle, Loader, Database, X, CreditCard, LogOut, CreditCard as Edit2, Trash2, Plus, MessageCircle, Menu, Lock, Megaphone } from 'lucide-react';
 import notFoundBg from './assets/not-found-bg.png';
 
 type Page = 'dashboard' | 'buy-data' | 'track-order' | 'admin' | 'not-found';
 type Network = 'MTN' | 'AirtelTigo' | 'Telecel';
 type NetworkState = 'active' | 'disabled' | 'closed';
 type NetworkStates = Record<Network, NetworkState>;
-type AdminTab = 'orders' | 'packages' | 'networks';
+type AdminTab = 'orders' | 'packages' | 'networks' | 'notices';
 type OrderStatus = 'Pending' | 'Processing' | 'Delivered' | 'Failed';
 
 const NETWORK_STATES_KEY = 'matornawo_network_states';
@@ -193,6 +193,37 @@ type DbPackage = {
 };
 
 const PACKAGES_API = '/api/packages';
+const NOTICES_API = '/api/notices';
+
+interface Notice {
+  id: string;
+  message: string;
+  active: boolean;
+  createdAt: string;
+}
+
+type DbNotice = {
+  notice_id: string;
+  message: string;
+  active: boolean;
+  created_at: string;
+};
+
+function mapDbNotice(row: DbNotice): Notice {
+  return {
+    id: row.notice_id,
+    message: row.message,
+    active: row.active,
+    createdAt: row.created_at,
+  };
+}
+
+async function fetchActiveNotices(): Promise<Notice[]> {
+  const res = await fetch(NOTICES_API);
+  if (!res.ok) throw new Error('Failed to fetch notices');
+  const data = (await res.json()) as DbNotice[];
+  return data.map(mapDbNotice);
+}
 
 function mapDbPackage(row: DbPackage): Package {
   return {
@@ -228,6 +259,30 @@ function getInitialPage(): Page {
     }
   }
   return 'dashboard';
+}
+
+// ─── NOTICE TICKER ────────────────────────────────────────────────────────────
+
+function NoticeTicker({ notices }: { notices: Notice[] }) {
+  const activeNotices = notices.filter((n) => n.active);
+  if (activeNotices.length === 0) return null;
+
+  const line = activeNotices.map((n) => n.message).join('   ◆   ');
+
+  return (
+    <div
+      className="fixed top-14 left-0 right-0 md:left-[288px] z-20 h-8 flex items-center overflow-hidden border-b border-amber-400/20"
+      style={{ backgroundColor: '#1a1a1a' }}
+      aria-live="polite"
+    >
+      <div className="notice-marquee-track text-xs font-medium tracking-wide text-amber-400">
+        <span className="px-10">{line}</span>
+        <span className="px-10" aria-hidden="true">
+          {line}
+        </span>
+      </div>
+    </div>
+  );
 }
 
 // ─── TOAST ───────────────────────────────────────────────────────────────────
@@ -1000,6 +1055,7 @@ function AdminPanel({
   setNetworkStates,
   onLogout,
   showToast,
+  onNoticesChange,
 }: {
   orders: Order[];
   onUpdateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
@@ -1009,14 +1065,144 @@ function AdminPanel({
   setNetworkStates: React.Dispatch<React.SetStateAction<NetworkStates>>;
   onLogout: () => void;
   showToast: (msg: string, variant?: 'success' | 'error' | 'info') => void;
+  onNoticesChange: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<AdminTab>('orders');
+  const [adminNotices, setAdminNotices] = useState<Notice[]>([]);
+  const [editingNoticeId, setEditingNoticeId] = useState<string | null>(null);
+  const [noticeEditMessage, setNoticeEditMessage] = useState('');
+  const [newNoticeMessage, setNewNoticeMessage] = useState('');
+  const [noticeError, setNoticeError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<{ size: string; validity: string; price: string }>({ size: '', validity: '', price: '' });
   const [editError, setEditError] = useState<string | null>(null);
   const [addingPackage, setAddingPackage] = useState(false);
   const [newPackageForm, setNewPackageForm] = useState({ network: 'MTN' as Network, size: '', validity: '', price: '' });
+
+  const loadAdminNotices = () => {
+    adminFetch(NOTICES_API)
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to load notices');
+        return res.json() as Promise<DbNotice[]>;
+      })
+      .then((rows) => setAdminNotices(rows.map(mapDbNotice)))
+      .catch((err) => {
+        console.error('Failed to load notices:', err);
+        showToast('Failed to load notices', 'error');
+      });
+  };
+
+  useEffect(() => {
+    if (activeTab === 'notices') loadAdminNotices();
+  }, [activeTab]);
+
+  const startEditingNotice = (notice: Notice) => {
+    setEditingNoticeId(notice.id);
+    setNoticeEditMessage(notice.message);
+    setNoticeError(null);
+  };
+
+  const cancelEditingNotice = () => {
+    setEditingNoticeId(null);
+    setNoticeEditMessage('');
+    setNoticeError(null);
+  };
+
+  const saveEditingNotice = (id: string) => {
+    const message = noticeEditMessage.trim();
+    if (!message) {
+      setNoticeError('Message is required');
+      return;
+    }
+    adminFetch(NOTICES_API, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notice_id: id, message }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to update notice');
+        return res.json() as Promise<DbNotice>;
+      })
+      .then((row) => {
+        setAdminNotices((prev) => prev.map((n) => (n.id === id ? mapDbNotice(row) : n)));
+        setEditingNoticeId(null);
+        setNoticeError(null);
+        onNoticesChange();
+        showToast('Notice updated', 'success');
+      })
+      .catch((err) => {
+        console.error('Failed to update notice:', err);
+        showToast('Failed to update notice', 'error');
+      });
+  };
+
+  const toggleNoticeActive = (id: string, active: boolean) => {
+    adminFetch(NOTICES_API, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notice_id: id, active }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to update notice');
+        return res.json() as Promise<DbNotice>;
+      })
+      .then((row) => {
+        setAdminNotices((prev) => prev.map((n) => (n.id === id ? mapDbNotice(row) : n)));
+        onNoticesChange();
+        showToast(active ? 'Notice is now visible' : 'Notice hidden', 'success');
+      })
+      .catch((err) => {
+        console.error('Failed to toggle notice:', err);
+        showToast('Failed to update notice', 'error');
+      });
+  };
+
+  const handleDeleteNotice = (id: string) => {
+    if (!confirm('Delete this notice?')) return;
+    adminFetch(NOTICES_API, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notice_id: id }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to delete notice');
+        setAdminNotices((prev) => prev.filter((n) => n.id !== id));
+        onNoticesChange();
+        showToast('Notice deleted', 'success');
+      })
+      .catch((err) => {
+        console.error('Failed to delete notice:', err);
+        showToast('Failed to delete notice', 'error');
+      });
+  };
+
+  const handleAddNotice = () => {
+    const message = newNoticeMessage.trim();
+    if (!message) {
+      showToast('Enter a notice message', 'error');
+      return;
+    }
+    adminFetch(NOTICES_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to create notice');
+        return res.json() as Promise<DbNotice>;
+      })
+      .then((row) => {
+        setAdminNotices((prev) => [mapDbNotice(row), ...prev]);
+        setNewNoticeMessage('');
+        onNoticesChange();
+        showToast('Notice published', 'success');
+      })
+      .catch((err) => {
+        console.error('Failed to create notice:', err);
+        showToast('Failed to create notice', 'error');
+      });
+  };
 
   const startEditing = (pkg: Package) => {
     setEditingId(pkg.id);
@@ -1127,7 +1313,7 @@ function AdminPanel({
       </div>
 
       <div className="flex gap-2 mb-6 border-b border-gray-200 overflow-x-auto">
-        {(['orders', 'packages', 'networks'] as AdminTab[]).map((tab) => (
+        {(['orders', 'packages', 'networks', 'notices'] as AdminTab[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -1360,6 +1546,131 @@ function AdminPanel({
           ))}
         </div>
       )}
+
+      {/* NOTICES TAB */}
+      {activeTab === 'notices' && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-lg shadow p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Megaphone className="w-4 h-4 text-amber-500" />
+              <h3 className="font-bold text-gray-800">New notice</h3>
+            </div>
+            <p className="text-xs text-gray-500">
+              Active notices scroll left to right on the customer header bar.
+            </p>
+            <textarea
+              value={newNoticeMessage}
+              onChange={(e) => setNewNoticeMessage(e.target.value)}
+              placeholder="e.g. MTN bundles restocked — order now!"
+              maxLength={500}
+              rows={2}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
+            />
+            <button
+              onClick={handleAddNotice}
+              className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-gray-900 font-bold px-4 py-2 rounded-lg text-sm"
+            >
+              <Plus className="w-4 h-4" />
+              Publish notice
+            </button>
+          </div>
+
+          <div className="bg-white rounded-lg shadow overflow-hidden">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th className="text-left px-4 py-3 text-xs font-bold text-gray-500 uppercase">Message</th>
+                  <th className="text-left px-4 py-3 text-xs font-bold text-gray-500 uppercase">Status</th>
+                  <th className="text-left px-4 py-3 text-xs font-bold text-gray-500 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {adminNotices.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="px-4 py-8 text-center text-gray-400 text-sm">
+                      No notices yet. Add one above.
+                    </td>
+                  </tr>
+                ) : (
+                  adminNotices.map((notice) => {
+                    const isEditing = editingNoticeId === notice.id;
+                    return (
+                      <tr key={notice.id} className="border-t border-gray-100 hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm text-gray-700 align-top">
+                          {isEditing ? (
+                            <div className="space-y-1">
+                              <textarea
+                                value={noticeEditMessage}
+                                onChange={(e) => setNoticeEditMessage(e.target.value)}
+                                maxLength={500}
+                                rows={2}
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
+                              />
+                              {noticeError && <p className="text-xs text-red-500">{noticeError}</p>}
+                            </div>
+                          ) : (
+                            notice.message
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm align-top">
+                          <button
+                            type="button"
+                            onClick={() => toggleNoticeActive(notice.id, !notice.active)}
+                            className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
+                              notice.active
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-gray-100 text-gray-500'
+                            }`}
+                          >
+                            {notice.active ? 'Visible' : 'Hidden'}
+                          </button>
+                        </td>
+                        <td className="px-4 py-3 text-sm align-top">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {isEditing ? (
+                              <>
+                                <button
+                                  onClick={() => saveEditingNotice(notice.id)}
+                                  className="bg-amber-400 hover:bg-amber-300 text-gray-900 font-bold px-3 py-1 rounded text-xs"
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  onClick={cancelEditingNotice}
+                                  className="bg-red-500 hover:bg-red-600 text-white font-semibold px-3 py-1 rounded text-xs"
+                                >
+                                  Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => startEditingNotice(notice)}
+                                  className="flex items-center gap-1 text-blue-600 hover:text-blue-800 font-semibold text-xs"
+                                >
+                                  <Edit2 className="w-3 h-3" />
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteNotice(notice.id)}
+                                  className="flex items-center gap-1 text-red-600 hover:text-red-800 font-semibold text-xs"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  Delete
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1446,10 +1757,22 @@ export default function App() {
   const [packages, setPackages] = useState<Package[]>([]);
   const packagesHydratedRef = useRef(false);
   const [networkStates, setNetworkStates] = useState<NetworkStates>(loadNetworkStates);
+  const [notices, setNotices] = useState<Notice[]>([]);
+  const hasActiveNotices = notices.some((n) => n.active);
+
+  const refreshCustomerNotices = () => {
+    fetchActiveNotices()
+      .then(setNotices)
+      .catch((err) => console.error('Failed to load notices:', err));
+  };
 
   useEffect(() => {
     localStorage.setItem(NETWORK_STATES_KEY, JSON.stringify(networkStates));
   }, [networkStates]);
+
+  useEffect(() => {
+    refreshCustomerNotices();
+  }, []);
 
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
@@ -1576,6 +1899,7 @@ export default function App() {
         setNetworkStates={setNetworkStates}
         onLogout={handleAdminLogout}
         showToast={showToast}
+        onNoticesChange={refreshCustomerNotices}
       />
     );
   }
@@ -1651,7 +1975,12 @@ export default function App() {
         </button>
       </header>
 
-      <main className="min-h-screen ml-0 md:ml-[288px] pt-14" style={{ backgroundColor: '#f3f3f0' }}>
+      <NoticeTicker notices={notices} />
+
+      <main
+        className={`min-h-screen ml-0 md:ml-[288px] ${hasActiveNotices ? 'pt-[5.5rem]' : 'pt-14'}`}
+        style={{ backgroundColor: '#f3f3f0' }}
+      >
         {activePage === 'dashboard' && (
           <Dashboard showToast={showToast} onPackageSelect={handlePackageSelect} packages={packages} networkStates={networkStates} />
         )}

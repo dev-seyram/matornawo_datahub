@@ -1,3 +1,22 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@keyframes notice-marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.notice-marquee-track {
+  display: inline-flex;
+  width: max-content;
+  animation: notice-marquee 40s linear infinite;
+}
+
+.notice-marquee-track:hover {
+  animation-play-state: paused;
+}
