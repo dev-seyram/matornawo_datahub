@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { LayoutDashboard, ShoppingCart, Search, UserPlus, Clock, Wifi, Users, Rocket, User, ChevronRight, CheckCircle, Loader, Database, X, CreditCard, LogOut, CreditCard as Edit2, Trash2, Plus, MessageCircle, Menu, Lock, Megaphone } from 'lucide-react';
 import notFoundBg from './assets/not-found-bg.png';
+import happyCustomer from './assets/happy-customer.png';
 
 type Page = 'dashboard' | 'buy-data' | 'track-order' | 'admin' | 'not-found';
 type Network = 'MTN' | 'AirtelTigo' | 'Telecel';
 type NetworkState = 'active' | 'disabled' | 'closed';
 type NetworkStates = Record<Network, NetworkState>;
-type AdminTab = 'orders' | 'packages' | 'networks' | 'notices';
+type AdminTab = 'orders' | 'packages' | 'networks' | 'notices' | 'promos';
 type OrderStatus = 'Pending' | 'Processing' | 'Delivered' | 'Failed';
 
 const NETWORK_STATES_KEY = 'matornawo_network_states';
@@ -224,6 +225,38 @@ async function fetchActiveNotices(): Promise<Notice[]> {
   if (!res.ok) throw new Error('Failed to fetch notices');
   const data = (await res.json()) as DbNotice[];
   return data.map(mapDbNotice);
+}
+
+const PROMO_SLIDES_API = '/api/promo-slides';
+
+interface PromoSlide {
+  index: number;
+  title: string;
+  headline: string;
+  backgroundColor: string;
+}
+
+type DbPromoSlide = {
+  slide_index: number;
+  title: string;
+  headline: string;
+  background_color: string;
+};
+
+function mapDbPromoSlide(row: DbPromoSlide): PromoSlide {
+  return {
+    index: row.slide_index,
+    title: row.title,
+    headline: row.headline,
+    backgroundColor: row.background_color,
+  };
+}
+
+async function fetchPromoSlides(): Promise<PromoSlide[]> {
+  const res = await fetch(PROMO_SLIDES_API);
+  if (!res.ok) throw new Error('Failed to fetch promo slides');
+  const data = (await res.json()) as DbPromoSlide[];
+  return data.map(mapDbPromoSlide);
 }
 
 function mapDbPackage(row: DbPackage): Package {
@@ -815,6 +848,51 @@ Thank you for choosing MATOE CONNECT! 🙏`;
   );
 }
 
+// ─── PROMO CAROUSEL ───────────────────────────────────────────────────────────
+
+function PromoCarousel({ slides }: { slides: PromoSlide[] }) {
+  const sorted = [...slides].sort((a, b) => a.index - b.index);
+  const [active, setActive] = useState(0);
+
+  useEffect(() => {
+    if (sorted.length <= 1) return;
+    const id = window.setInterval(
+      () => setActive((i) => (i + 1) % sorted.length),
+      5000
+    );
+    return () => window.clearInterval(id);
+  }, [sorted.length]);
+
+  if (sorted.length === 0) return null;
+
+  const slide = sorted[active] ?? sorted[0];
+
+  return (
+    <div className="mt-2 w-full max-w-lg">
+      <div
+        className="rounded-2xl px-8 py-4 shadow-xl transition-colors duration-500"
+        style={{ backgroundColor: slide.backgroundColor }}
+      >
+        <p className="text-xs font-bold uppercase tracking-widest text-white/85">{slide.title}</p>
+        <p className="text-white font-bold text-base mt-1">{slide.headline}</p>
+        <div className="flex gap-1.5 mt-3">
+          {sorted.map((s, i) => (
+            <button
+              key={s.index}
+              type="button"
+              aria-label={`Show promo slide ${i + 1}`}
+              onClick={() => setActive(i)}
+              className={`w-2 h-2 rounded-full transition-opacity ${
+                i === active ? 'bg-white' : 'bg-white/40 hover:bg-white/60'
+              }`}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
 
 function Dashboard({
@@ -822,11 +900,13 @@ function Dashboard({
   onPackageSelect,
   packages,
   networkStates,
+  promoSlides,
 }: {
   showToast: (msg: string, variant?: 'success' | 'error' | 'info') => void;
   onPackageSelect: (pkg: SelectedPackage) => void;
   packages: Package[];
   networkStates: NetworkStates;
+  promoSlides: PromoSlide[];
 }) {
   const [activeNetwork, setActiveNetwork] = useState<Network>('MTN');
 
@@ -834,24 +914,16 @@ function Dashboard({
     <div>
       <div className="relative overflow-hidden" style={{ height: '340px' }}>
         <img
-          src="https://images.pexels.com/photos/3861972/pexels-photo-3861972.jpeg?auto=compress&cs=tinysrgb&w=1200&h=400&fit=crop"
-          alt="Young person with phone"
-          className="w-full h-full object-cover"
+          src={happyCustomer}
+          alt="Happy customer with phone"
+          className="w-full h-full object-cover object-top"
         />
-        <div className="absolute inset-0 bg-black/65" />
+        <div className="absolute inset-0 bg-black/55" />
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-4">
           <p className="text-xs font-bold uppercase tracking-[0.25em] text-amber-400">Welcome</p>
           <h1 className="text-3xl font-extrabold text-white text-center">Hello, Guest!</h1>
           <p className="text-gray-300 text-sm text-center">Buy affordable data bundles instantly</p>
-          <div className="mt-2 bg-blue-600 rounded-2xl px-8 py-4 w-full max-w-lg shadow-xl">
-            <p className="text-xs font-bold uppercase tracking-widest text-blue-200">Telecel Promo</p>
-            <p className="text-white font-bold text-base mt-1">Fast & Reliable Data Plans</p>
-            <div className="flex gap-1.5 mt-3">
-              <span className="w-2 h-2 rounded-full bg-white" />
-              <span className="w-2 h-2 rounded-full bg-white opacity-40" />
-              <span className="w-2 h-2 rounded-full bg-white opacity-40" />
-            </div>
-          </div>
+          <PromoCarousel slides={promoSlides} />
           <button
             onClick={() => showToast('Agent registration is coming soon!', 'info')}
             className="mt-1 flex items-center gap-2 bg-gray-900/80 hover:bg-gray-800 text-white text-sm font-semibold px-6 py-2.5 rounded-full border border-gray-700 transition-colors duration-200"
@@ -1057,6 +1129,8 @@ function AdminPanel({
   onLogout,
   showToast,
   onNoticesChange,
+  promoSlides,
+  onPromoSlidesChange,
 }: {
   orders: Order[];
   onUpdateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
@@ -1067,9 +1141,12 @@ function AdminPanel({
   onLogout: () => void;
   showToast: (msg: string, variant?: 'success' | 'error' | 'info') => void;
   onNoticesChange: () => void;
+  promoSlides: PromoSlide[];
+  onPromoSlidesChange: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<AdminTab>('orders');
   const [adminNotices, setAdminNotices] = useState<Notice[]>([]);
+  const [promoDrafts, setPromoDrafts] = useState<PromoSlide[]>([]);
   const [editingNoticeId, setEditingNoticeId] = useState<string | null>(null);
   const [noticeEditMessage, setNoticeEditMessage] = useState('');
   const [newNoticeMessage, setNewNoticeMessage] = useState('');
@@ -1097,6 +1174,50 @@ function AdminPanel({
   useEffect(() => {
     if (activeTab === 'notices') loadAdminNotices();
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'promos') {
+      const sorted = [...promoSlides].sort((a, b) => a.index - b.index);
+      setPromoDrafts(sorted);
+    }
+  }, [activeTab, promoSlides]);
+
+  const updatePromoDraft = (index: number, field: 'title' | 'headline' | 'backgroundColor', value: string) => {
+    setPromoDrafts((prev) =>
+      prev.map((s) => (s.index === index ? { ...s, [field]: value } : s))
+    );
+  };
+
+  const savePromoSlide = (slide: PromoSlide) => {
+    const title = slide.title.trim();
+    const headline = slide.headline.trim();
+    if (!title || !headline) {
+      showToast('Title and headline are required', 'error');
+      return;
+    }
+    adminFetch(PROMO_SLIDES_API, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        slide_index: slide.index,
+        title,
+        headline,
+        background_color: slide.backgroundColor,
+      }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to save promo slide');
+        return res.json() as Promise<DbPromoSlide>;
+      })
+      .then(() => {
+        onPromoSlidesChange();
+        showToast(`Slide ${slide.index} saved`, 'success');
+      })
+      .catch((err) => {
+        console.error('Failed to save promo slide:', err);
+        showToast('Failed to save promo slide', 'error');
+      });
+  };
 
   const startEditingNotice = (notice: Notice) => {
     setEditingNoticeId(notice.id);
@@ -1335,7 +1456,7 @@ function AdminPanel({
       </div>
 
       <div className="flex gap-2 mb-6 border-b border-gray-200 overflow-x-auto">
-        {(['orders', 'packages', 'networks', 'notices'] as AdminTab[]).map((tab) => (
+        {(['orders', 'packages', 'networks', 'notices', 'promos'] as AdminTab[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -1569,6 +1690,75 @@ function AdminPanel({
         </div>
       )}
 
+      {/* PROMOS TAB */}
+      {activeTab === 'promos' && (
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Edit the three rotating banners on the dashboard hero. Each slide has its own text and background colour.
+          </p>
+          {promoDrafts.map((slide) => (
+            <div key={slide.index} className="bg-white rounded-lg shadow p-4 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="font-bold text-gray-800">Slide {slide.index}</h3>
+                <div
+                  className="rounded-lg px-4 py-2 text-xs font-bold uppercase tracking-wider text-white shadow-sm"
+                  style={{ backgroundColor: slide.backgroundColor }}
+                >
+                  Preview
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Small label</label>
+                <input
+                  type="text"
+                  value={slide.title}
+                  onChange={(e) => updatePromoDraft(slide.index, 'title', e.target.value)}
+                  maxLength={80}
+                  placeholder="e.g. TELECEL PROMO"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Main text</label>
+                <input
+                  type="text"
+                  value={slide.headline}
+                  onChange={(e) => updatePromoDraft(slide.index, 'headline', e.target.value)}
+                  maxLength={120}
+                  placeholder="e.g. Fast & Reliable Data Plans"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Background colour</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={slide.backgroundColor}
+                    onChange={(e) => updatePromoDraft(slide.index, 'backgroundColor', e.target.value)}
+                    className="w-12 h-10 rounded border border-gray-200 cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={slide.backgroundColor}
+                    onChange={(e) => updatePromoDraft(slide.index, 'backgroundColor', e.target.value)}
+                    placeholder="#2563eb"
+                    className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  />
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => savePromoSlide(slide)}
+                className="bg-amber-400 hover:bg-amber-300 text-gray-900 font-bold px-4 py-2 rounded-lg text-sm"
+              >
+                Save slide {slide.index}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* NOTICES TAB */}
       {activeTab === 'notices' && (
         <div className="space-y-4">
@@ -1780,6 +1970,7 @@ export default function App() {
   const packagesHydratedRef = useRef(false);
   const [networkStates, setNetworkStates] = useState<NetworkStates>(loadNetworkStates);
   const [notices, setNotices] = useState<Notice[]>([]);
+  const [promoSlides, setPromoSlides] = useState<PromoSlide[]>([]);
   const hasActiveNotices = notices.some((n) => n.active);
 
   const refreshCustomerNotices = () => {
@@ -1788,12 +1979,19 @@ export default function App() {
       .catch((err) => console.error('Failed to load notices:', err));
   };
 
+  const refreshPromoSlides = () => {
+    fetchPromoSlides()
+      .then(setPromoSlides)
+      .catch((err) => console.error('Failed to load promo slides:', err));
+  };
+
   useEffect(() => {
     localStorage.setItem(NETWORK_STATES_KEY, JSON.stringify(networkStates));
   }, [networkStates]);
 
   useEffect(() => {
     refreshCustomerNotices();
+    refreshPromoSlides();
   }, []);
 
   useEffect(() => {
@@ -1922,6 +2120,8 @@ export default function App() {
         onLogout={handleAdminLogout}
         showToast={showToast}
         onNoticesChange={refreshCustomerNotices}
+        promoSlides={promoSlides}
+        onPromoSlidesChange={refreshPromoSlides}
       />
     );
   }
@@ -2004,7 +2204,13 @@ export default function App() {
         style={{ backgroundColor: '#f3f3f0' }}
       >
         {activePage === 'dashboard' && (
-          <Dashboard showToast={showToast} onPackageSelect={handlePackageSelect} packages={packages} networkStates={networkStates} />
+          <Dashboard
+            showToast={showToast}
+            onPackageSelect={handlePackageSelect}
+            packages={packages}
+            networkStates={networkStates}
+            promoSlides={promoSlides}
+          />
         )}
         {activePage === 'buy-data' && (
           <BuyData onPackageSelect={handlePackageSelect} packages={packages} networkStates={networkStates} />
