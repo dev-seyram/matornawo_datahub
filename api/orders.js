@@ -1,5 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 import { setCorsHeaders, requireAdmin } from '../lib/adminAuth.js';
+import { notifyAdminNewOrder } from '../lib/notifyAdmin.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
@@ -55,7 +56,11 @@ export default async function handler(req, res) {
         VALUES (${order_id}, ${network}, ${pkg}, ${price}, ${service_fee}, ${total}, ${recipient_phone}, ${email}, 'Pending')
         RETURNING *
       `;
-      return res.status(201).json(result[0]);
+      const saved = result[0];
+      void notifyAdminNewOrder(saved).catch((err) => {
+        console.error('Failed to notify admin of new order:', err);
+      });
+      return res.status(201).json(saved);
     }
 
     if (req.method === 'PATCH') {
