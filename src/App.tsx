@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { LayoutDashboard, ShoppingCart, Search, UserPlus, Clock, Wifi, Users, Rocket, User, ChevronRight, CheckCircle, Loader, Database, X, CreditCard, LogOut, CreditCard as Edit2, Trash2, Plus, MessageCircle, Menu, Lock, Megaphone } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Search, UserPlus, Clock, Wifi, Users, Rocket, User, ChevronRight, CheckCircle, Loader, Database, X, CreditCard, LogOut, CreditCard as Edit2, Trash2, Plus, MessageCircle, Menu, Lock, Megaphone, Linkedin } from 'lucide-react';
 import notFoundBg from './assets/not-found-bg.png';
 import happyCustomer from './assets/happy-customer.png';
 
@@ -12,6 +12,7 @@ type OrderStatus = 'Pending' | 'Processing' | 'Delivered' | 'Failed';
 
 const NETWORK_STATES_KEY = 'matornawo_network_states';
 const PACKAGES_STORAGE_KEY = 'matornawo_packages';
+const DEVELOPER_LINKEDIN_URL = 'https://www.linkedin.com/in/seyramgblorkpor/';
 
 const DEFAULT_NETWORK_STATES: NetworkStates = {
   MTN: 'active',
@@ -2164,7 +2165,7 @@ export default function App() {
           ))}
         </nav>
 
-        <div className="px-4 pb-6 border-t border-gray-800 pt-4">
+        <div className="px-4 pb-6 border-t border-gray-800 pt-4 space-y-3">
           <button
             onClick={() => showToast('Agent registration is coming soon!', 'info')}
             className="w-full flex items-center justify-center gap-2 bg-amber-400 hover:bg-amber-300 active:scale-95 text-gray-900 font-bold py-3 rounded-full text-sm transition-all duration-150"
@@ -2172,6 +2173,16 @@ export default function App() {
             <UserPlus className="w-4 h-4" />
             Become an Agent
           </button>
+          <a
+            href={DEVELOPER_LINKEDIN_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-full text-xs font-semibold text-white transition-opacity hover:opacity-90"
+            style={{ backgroundColor: '#0A66C2' }}
+          >
+            <Linkedin className="w-4 h-4" />
+            Contact developer on LinkedIn
+          </a>
         </div>
       </aside>
 
