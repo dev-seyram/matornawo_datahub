@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { LayoutDashboard, ShoppingCart, Search, UserPlus, Clock, Wifi, Users, Rocket, User, ChevronRight, CheckCircle, Loader, Database, X, CreditCard, LogOut, CreditCard as Edit2, Trash2, Plus, MessageCircle, Menu, Lock, Megaphone, Linkedin } from 'lucide-react';
+import { useState, useEffect, useRef, createContext, useContext } from 'react';
+import { LayoutDashboard, ShoppingCart, Search, UserPlus, Clock, Wifi, Users, Rocket, User, ChevronRight, CheckCircle, Loader, Database, X, CreditCard, LogOut, CreditCard as Edit2, Trash2, Plus, MessageCircle, Menu, Lock, Megaphone, Linkedin, Settings } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
 import notFoundBg from './assets/not-found-bg.png';
 import happyCustomer from './assets/happy-customer.png';
@@ -8,7 +8,30 @@ type Page = 'dashboard' | 'buy-data' | 'track-order' | 'admin' | 'not-found';
 type Network = 'MTN' | 'AirtelTigo' | 'Telecel';
 type NetworkState = 'active' | 'disabled' | 'closed';
 type NetworkStates = Record<Network, NetworkState>;
-type AdminTab = 'orders' | 'packages' | 'networks' | 'notices' | 'promos';
+type AdminTab = 'orders' | 'packages' | 'networks' | 'notices' | 'promos' | 'settings';
+
+interface SiteSettings {
+  businessName: string;
+  whatsappOrderReminderEnabled: boolean;
+}
+
+const DEFAULT_BUSINESS_NAME = 'MATOE CONNECT';
+const WHATSAPP_SUPPORT_NUMBER = '233534764068';
+
+const defaultSiteSettings: SiteSettings = {
+  businessName: DEFAULT_BUSINESS_NAME,
+  whatsappOrderReminderEnabled: true,
+};
+
+const SiteSettingsContext = createContext<SiteSettings>(defaultSiteSettings);
+
+function useSiteSettings() {
+  return useContext(SiteSettingsContext);
+}
+
+function whatsAppUrl(text: string) {
+  return `https://wa.me/${WHATSAPP_SUPPORT_NUMBER}?text=${encodeURIComponent(text)}`;
+}
 type OrderStatus = 'Pending' | 'Processing' | 'Delivered' | 'Failed';
 
 const NETWORK_STATES_KEY = 'matornawo_network_states';
@@ -89,6 +112,25 @@ const ADMIN_LOGIN_API = '/api/admin/login';
 const ADMIN_LOGOUT_API = '/api/admin/logout';
 const ADMIN_SESSION_API = '/api/admin/session';
 const ADMIN_TELEGRAM_TEST_API = '/api/admin/telegram-test';
+const SETTINGS_API = '/api/settings';
+
+type DbSiteSettings = {
+  business_name: string;
+  whatsapp_order_reminder_enabled: boolean;
+};
+
+function mapDbSiteSettings(row: DbSiteSettings): SiteSettings {
+  return {
+    businessName: row.business_name,
+    whatsappOrderReminderEnabled: Boolean(row.whatsapp_order_reminder_enabled),
+  };
+}
+
+async function fetchSiteSettings(): Promise<SiteSettings> {
+  const res = await fetch(SETTINGS_API);
+  if (!res.ok) throw new Error('Failed to fetch settings');
+  return mapDbSiteSettings((await res.json()) as DbSiteSettings);
+}
 
 function adminFetch(input: string, init?: RequestInit) {
   return fetch(input, { ...init, credentials: 'include' });
@@ -341,6 +383,7 @@ function Toast({ message, onClose, variant = 'success' }: {
 // ─── NOT FOUND ────────────────────────────────────────────────────────────────
 
 function NotFound() {
+  const { businessName } = useSiteSettings();
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 relative overflow-hidden">
 
@@ -376,7 +419,7 @@ function NotFound() {
           <div className="w-10 h-10 bg-amber-400 rounded-lg flex items-center justify-center shadow-lg">
             <Database className="w-5 h-5 text-gray-900" />
           </div>
-          <span className="text-white font-bold text-xl tracking-tight">MATOE CONNECT</span>
+          <span className="text-white font-bold text-xl tracking-tight">{businessName}</span>
         </div>
 
         {/* 404 */}
@@ -418,7 +461,7 @@ function NotFound() {
           </button>
 
           <button
-            onClick={() => window.open('https://wa.me/233534764068?text=Hello%20MATOE%20CONNECT%2C%20I%20need%20help.', '_blank')}
+            onClick={() => window.open(whatsAppUrl(`Hello ${businessName}, I need help.`), '_blank')}
             className="flex-1 py-3 px-6 rounded-xl font-bold text-white text-sm shadow-lg hover:scale-105 active:scale-95 transition-all duration-200 flex items-center justify-center gap-2"
             style={{ backgroundColor: '#25D366' }}
           >
@@ -429,7 +472,7 @@ function NotFound() {
 
         {/* Footer */}
         <p className="text-gray-500 text-xs mt-12">
-          © {new Date().getFullYear()} MATOE CONNECT. All rights reserved.
+          © {new Date().getFullYear()} {businessName}. All rights reserved.
         </p>
       </div>
     </div>
@@ -485,6 +528,7 @@ function ComingSoon({ network }: { network: Network }) {
 // ─── STORE CLOSED ─────────────────────────────────────────────────────────────
 
 function StoreClosed({ network }: { network: Network }) {
+  const { businessName } = useSiteSettings();
   return (
     <div className="flex flex-col items-center justify-center py-20 px-6">
       <div className="bg-gray-50 rounded-2xl p-12 max-w-md w-full flex flex-col items-center gap-4 border border-red-100">
@@ -497,7 +541,14 @@ function StoreClosed({ network }: { network: Network }) {
           Please check back later or contact us on WhatsApp.
         </p>
         <button
-          onClick={() => window.open('https://wa.me/233534764068?text=Hello%20MATOE%20CONNECT%2C%20I%20need%20help%20with%20my%20order.%20%0A%0AOrder%20ID%3A%20%0ARecipient%20Number%3A%20%0AIssue%3A%20', '_blank')}
+          onClick={() =>
+            window.open(
+              whatsAppUrl(
+                `Hello ${businessName}, I need help with my order.\n\nOrder ID: \nRecipient Number: \nIssue: `
+              ),
+              '_blank'
+            )
+          }
           className="w-full flex items-center justify-center gap-2 text-white font-semibold text-sm py-2.5 px-4 rounded-xl transition-colors"
           style={{ backgroundColor: '#25D366' }}
         >
@@ -579,16 +630,19 @@ function BuyModal({
   onOrderCreated: (order: Order) => Promise<void>;
   showToast: (msg: string, variant?: 'success' | 'error' | 'info') => void;
 }) {
+  const { businessName, whatsappOrderReminderEnabled } = useSiteSettings();
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [errors, setErrors] = useState<{ phone?: string; email?: string }>({});
   const [processing, setProcessing] = useState(false);
+  const [orderComplete, setOrderComplete] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState<{ whatsappURL: string } | null>(null);
   const paymentCompletedRef = useRef(false);
 
   useEffect(() => {
     if (!isOpen) {
       paymentCompletedRef.current = false;
+      setOrderComplete(false);
       setPaymentSuccess(null);
       setPhone('');
       setEmail('');
@@ -702,13 +756,17 @@ function BuyModal({
 
     showToast(`✅ Payment Successful! Your ${orderPackageSize} bundle is being sent to ${recipientPhone}`, 'success');
 
-    const orderDate = new Date().toLocaleString('en-GH', {
-      timeZone: 'Africa/Accra',
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    });
+    paymentCompletedRef.current = true;
+    setOrderComplete(true);
 
-    const message = `🌐 *MATOE CONNECT — ORDER CONFIRMATION*
+    if (whatsappOrderReminderEnabled) {
+      const orderDate = new Date().toLocaleString('en-GH', {
+        timeZone: 'Africa/Accra',
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      });
+
+      const message = `🌐 *${businessName} — ORDER CONFIRMATION*
 
 ✅ *Payment Successful!*
 
@@ -728,17 +786,17 @@ function BuyModal({
 
 _Please send this message as a reminder of your order. Your data bundle will be sent to ${recipientPhone} shortly._
 
-Thank you for choosing MATOE CONNECT! 🙏`;
+Thank you for choosing ${businessName}! 🙏`;
 
-    const encodedMessage = encodeURIComponent(message);
-    const whatsappURL = `https://wa.me/233534764068?text=${encodedMessage}`;
+      const whatsappURL = whatsAppUrl(message);
+      setPaymentSuccess({ whatsappURL });
 
-    paymentCompletedRef.current = true;
-    setPaymentSuccess({ whatsappURL });
-
-    setTimeout(() => {
-      window.open(whatsappURL, '_blank');
-    }, 1500);
+      setTimeout(() => {
+        window.open(whatsappURL, '_blank');
+      }, 1500);
+    } else {
+      setPaymentSuccess(null);
+    }
   };
 
   const handlePaymentClosed = () => {
@@ -769,20 +827,28 @@ Thank you for choosing MATOE CONNECT! 🙏`;
         </div>
 
         <div className="p-6 space-y-4">
-          {paymentSuccess ? (
+          {orderComplete ? (
             <div className="text-center space-y-4">
               <CheckCircle className="w-14 h-14 text-green-500 mx-auto" />
               <p className="text-lg font-bold text-gray-800">Payment Successful!</p>
-              <p className="text-sm text-gray-500">
-                Your order has been placed. Send your confirmation on WhatsApp so we can process your bundle.
-              </p>
-              <button
-                onClick={() => window.open(paymentSuccess.whatsappURL, '_blank')}
-                style={{ backgroundColor: '#25D366' }}
-                className="w-full flex items-center justify-center gap-2 text-white font-semibold py-3 rounded-xl mt-3"
-              >
-                Send Order Confirmation on WhatsApp
-              </button>
+              {paymentSuccess ? (
+                <>
+                  <p className="text-sm text-gray-500">
+                    Your order has been placed. Send your confirmation on WhatsApp so we can process your bundle.
+                  </p>
+                  <button
+                    onClick={() => window.open(paymentSuccess.whatsappURL, '_blank')}
+                    style={{ backgroundColor: '#25D366' }}
+                    className="w-full flex items-center justify-center gap-2 text-white font-semibold py-3 rounded-xl mt-3"
+                  >
+                    Send Order Confirmation on WhatsApp
+                  </button>
+                </>
+              ) : (
+                <p className="text-sm text-gray-500">
+                  Your order has been placed. We will process your bundle shortly.
+                </p>
+              )}
             </div>
           ) : (
           <>
@@ -910,6 +976,7 @@ function Dashboard({
   networkStates: NetworkStates;
   promoSlides: PromoSlide[];
 }) {
+  const { businessName } = useSiteSettings();
   const [activeNetwork, setActiveNetwork] = useState<Network>('MTN');
 
   return (
@@ -947,7 +1014,14 @@ function Dashboard({
           </div>
           <div className="px-5 py-4 border-b border-gray-100">
             <button
-              onClick={() => window.open('https://wa.me/233534764068?text=Hello%20MATOE%20CONNECT%2C%20I%20need%20help%20with%20my%20order.%20%0A%0AOrder%20ID%3A%20%0ARecipient%20Number%3A%20%0AIssue%3A%20', '_blank')}
+              onClick={() =>
+                window.open(
+                  whatsAppUrl(
+                    `Hello ${businessName}, I need help with my order.\n\nOrder ID: \nRecipient Number: \nIssue: `
+                  ),
+                  '_blank'
+                )
+              }
               className="w-full flex items-center gap-2 text-white font-semibold text-sm py-2 px-3 rounded-lg hover:opacity-90 transition-opacity"
               style={{ backgroundColor: '#25D366' }}
             >
@@ -1133,6 +1207,8 @@ function AdminPanel({
   onNoticesChange,
   promoSlides,
   onPromoSlidesChange,
+  siteSettings,
+  onSettingsChange,
 }: {
   orders: Order[];
   onUpdateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
@@ -1145,8 +1221,14 @@ function AdminPanel({
   onNoticesChange: () => void;
   promoSlides: PromoSlide[];
   onPromoSlidesChange: () => void;
+  siteSettings: SiteSettings;
+  onSettingsChange: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<AdminTab>('orders');
+  const [settingsDraft, setSettingsDraft] = useState({
+    businessName: siteSettings.businessName,
+    whatsappOrderReminderEnabled: siteSettings.whatsappOrderReminderEnabled,
+  });
   const [adminNotices, setAdminNotices] = useState<Notice[]>([]);
   const [promoDrafts, setPromoDrafts] = useState<PromoSlide[]>([]);
   const [editingNoticeId, setEditingNoticeId] = useState<string | null>(null);
@@ -1183,6 +1265,43 @@ function AdminPanel({
       setPromoDrafts(sorted);
     }
   }, [activeTab, promoSlides]);
+
+  useEffect(() => {
+    if (activeTab === 'settings') {
+      setSettingsDraft({
+        businessName: siteSettings.businessName,
+        whatsappOrderReminderEnabled: siteSettings.whatsappOrderReminderEnabled,
+      });
+    }
+  }, [activeTab, siteSettings]);
+
+  const saveSiteSettings = () => {
+    const businessName = settingsDraft.businessName.trim();
+    if (!businessName) {
+      showToast('Business name is required', 'error');
+      return;
+    }
+    adminFetch(SETTINGS_API, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        business_name: businessName,
+        whatsapp_order_reminder_enabled: settingsDraft.whatsappOrderReminderEnabled,
+      }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to save settings');
+        return res.json() as Promise<DbSiteSettings>;
+      })
+      .then(() => {
+        onSettingsChange();
+        showToast('Settings saved', 'success');
+      })
+      .catch((err) => {
+        console.error('Failed to save settings:', err);
+        showToast('Failed to save settings', 'error');
+      });
+  };
 
   const updatePromoDraft = (index: number, field: 'title' | 'headline' | 'backgroundColor', value: string) => {
     setPromoDrafts((prev) =>
@@ -1458,7 +1577,7 @@ function AdminPanel({
       </div>
 
       <div className="flex gap-2 mb-6 border-b border-gray-200 overflow-x-auto">
-        {(['orders', 'packages', 'networks', 'notices', 'promos'] as AdminTab[]).map((tab) => (
+        {(['orders', 'packages', 'networks', 'notices', 'promos', 'settings'] as AdminTab[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -1692,6 +1811,71 @@ function AdminPanel({
         </div>
       )}
 
+      {/* SETTINGS TAB */}
+      {activeTab === 'settings' && (
+        <div className="space-y-4 max-w-xl">
+          <div className="bg-white rounded-lg shadow p-4 space-y-4">
+            <div className="flex items-center gap-2">
+              <Settings className="w-4 h-4 text-amber-500" />
+              <h3 className="font-bold text-gray-800">Business name</h3>
+            </div>
+            <p className="text-xs text-gray-500">
+              Shown across the site: header, sidebar, order messages, and admin login.
+            </p>
+            <input
+              type="text"
+              value={settingsDraft.businessName}
+              onChange={(e) =>
+                setSettingsDraft((prev) => ({ ...prev, businessName: e.target.value }))
+              }
+              maxLength={80}
+              placeholder="e.g. MATOE CONNECT"
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+            />
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-4 space-y-3">
+            <h3 className="font-bold text-gray-800">WhatsApp order reminder</h3>
+            <p className="text-xs text-gray-500">
+              When enabled, customers are prompted to send an order confirmation on WhatsApp after payment.
+            </p>
+            <label className="flex items-center justify-between gap-4 cursor-pointer">
+              <span className="text-sm font-medium text-gray-700">
+                {settingsDraft.whatsappOrderReminderEnabled ? 'Enabled' : 'Disabled'}
+              </span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={settingsDraft.whatsappOrderReminderEnabled}
+                onClick={() =>
+                  setSettingsDraft((prev) => ({
+                    ...prev,
+                    whatsappOrderReminderEnabled: !prev.whatsappOrderReminderEnabled,
+                  }))
+                }
+                className={`relative w-11 h-6 rounded-full transition-colors ${
+                  settingsDraft.whatsappOrderReminderEnabled ? 'bg-amber-400' : 'bg-gray-300'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                    settingsDraft.whatsappOrderReminderEnabled ? 'translate-x-5' : ''
+                  }`}
+                />
+              </button>
+            </label>
+          </div>
+
+          <button
+            type="button"
+            onClick={saveSiteSettings}
+            className="bg-amber-400 hover:bg-amber-300 text-gray-900 font-bold px-6 py-2.5 rounded-lg text-sm"
+          >
+            Save settings
+          </button>
+        </div>
+      )}
+
       {/* PROMOS TAB */}
       {activeTab === 'promos' && (
         <div className="space-y-4">
@@ -1892,6 +2076,7 @@ function AdminPanel({
 // ─── ADMIN LOGIN ──────────────────────────────────────────────────────────────
 
 function AdminLogin({ onLogin }: { onLogin: () => void; showToast?: (msg: string, variant?: 'success' | 'error' | 'info') => void }) {
+  const { businessName } = useSiteSettings();
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -1928,7 +2113,7 @@ function AdminLogin({ onLogin }: { onLogin: () => void; showToast?: (msg: string
           <div className="w-12 h-12 rounded-lg bg-amber-400 flex items-center justify-center mx-auto mb-3">
             <Database className="w-6 h-6 text-gray-900" />
           </div>
-          <h1 className="text-2xl font-extrabold text-gray-900">MATOE CONNECT</h1>
+          <h1 className="text-2xl font-extrabold text-gray-900">{businessName}</h1>
           <p className="text-gray-600 text-sm mt-1">Admin Portal</p>
         </div>
         <div className="space-y-4">
@@ -1973,7 +2158,18 @@ export default function App() {
   const [networkStates, setNetworkStates] = useState<NetworkStates>(loadNetworkStates);
   const [notices, setNotices] = useState<Notice[]>([]);
   const [promoSlides, setPromoSlides] = useState<PromoSlide[]>([]);
+  const [siteSettings, setSiteSettings] = useState<SiteSettings>(defaultSiteSettings);
   const hasActiveNotices = notices.some((n) => n.active);
+
+  const wrapWithSettings = (content: React.ReactNode) => (
+    <SiteSettingsContext.Provider value={siteSettings}>{content}</SiteSettingsContext.Provider>
+  );
+
+  const refreshSiteSettings = () => {
+    fetchSiteSettings()
+      .then(setSiteSettings)
+      .catch((err) => console.error('Failed to load site settings:', err));
+  };
 
   const refreshCustomerNotices = () => {
     fetchActiveNotices()
@@ -1994,7 +2190,12 @@ export default function App() {
   useEffect(() => {
     refreshCustomerNotices();
     refreshPromoSlides();
+    refreshSiteSettings();
   }, []);
+
+  useEffect(() => {
+    document.title = `${siteSettings.businessName} — Affordable Data Bundles in Ghana`;
+  }, [siteSettings.businessName]);
 
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
@@ -2098,20 +2299,20 @@ export default function App() {
   ];
 
   // ── Special pages ──
-  if (activePage === 'not-found') return <NotFound />;
+  if (activePage === 'not-found') return wrapWithSettings(<NotFound />);
 
   if (activePage === 'admin') {
     if (!adminAuthChecked) {
-      return (
+      return wrapWithSettings(
         <div className="min-h-screen bg-gray-900 flex items-center justify-center">
           <Loader className="w-8 h-8 text-amber-400 animate-spin" />
         </div>
       );
     }
     if (!adminLoggedIn) {
-      return <AdminLogin onLogin={() => setAdminLoggedIn(true)} />;
+      return wrapWithSettings(<AdminLogin onLogin={() => setAdminLoggedIn(true)} />);
     }
-    return (
+    return wrapWithSettings(
       <AdminPanel
         orders={orders}
         onUpdateOrderStatus={handleUpdateOrderStatus}
@@ -2124,12 +2325,14 @@ export default function App() {
         onNoticesChange={refreshCustomerNotices}
         promoSlides={promoSlides}
         onPromoSlidesChange={refreshPromoSlides}
+        siteSettings={siteSettings}
+        onSettingsChange={refreshSiteSettings}
       />
     );
   }
 
   // ── Main app ──
-  return (
+  return wrapWithSettings(
     <div className="min-h-screen" style={{ fontFamily: "'Inter', system-ui, sans-serif", backgroundColor: '#f3f3f0' }}>
       {sidebarOpen && (
         <div className="fixed inset-0 bg-black/50 z-20 md:hidden" onClick={() => setSidebarOpen(false)} />
@@ -2145,7 +2348,7 @@ export default function App() {
           <div className="w-8 h-8 rounded-lg bg-amber-400 flex items-center justify-center flex-shrink-0">
             <Database className="w-4 h-4 text-gray-900" />
           </div>
-          <span className="text-white font-bold text-sm leading-tight">MATOE CONNECT</span>
+          <span className="text-white font-bold text-sm leading-tight">{siteSettings.businessName}</span>
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1">
@@ -2202,7 +2405,7 @@ export default function App() {
           <div className="w-6 h-6 rounded-md bg-amber-400 flex items-center justify-center">
             <Database className="w-3.5 h-3.5 text-gray-900" />
           </div>
-          <span className="text-white font-bold text-sm">MATOE CONNECT</span>
+          <span className="text-white font-bold text-sm">{siteSettings.businessName}</span>
         </div>
         <button className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center hover:bg-gray-700 transition-colors">
           <User className="w-4 h-4 text-gray-300" />
