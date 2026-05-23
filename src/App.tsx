@@ -85,6 +85,7 @@ const ORDERS_API = '/api/orders';
 const ADMIN_LOGIN_API = '/api/admin/login';
 const ADMIN_LOGOUT_API = '/api/admin/logout';
 const ADMIN_SESSION_API = '/api/admin/session';
+const ADMIN_TELEGRAM_TEST_API = '/api/admin/telegram-test';
 
 function adminFetch(input: string, init?: RequestInit) {
   return fetch(input, { ...init, credentials: 'include' });
@@ -1301,15 +1302,36 @@ function AdminPanel({
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
         <h1 className="text-3xl font-extrabold text-gray-800">Admin Dashboard</h1>
-        <button
-          onClick={onLogout}
-          className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
-        >
-          <LogOut className="w-4 h-4" />
-          Logout
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              adminFetch(ADMIN_TELEGRAM_TEST_API, { method: 'POST' })
+                .then(async (res) => {
+                  const data = (await res.json()) as { ok?: boolean; error?: string };
+                  if (res.ok && data.ok) {
+                    showToast('Test Telegram sent — check your phone', 'success');
+                  } else {
+                    showToast(data.error || 'Telegram test failed', 'error');
+                  }
+                })
+                .catch(() => showToast('Telegram test failed', 'error'));
+            }}
+            className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors text-sm"
+          >
+            <MessageCircle className="w-4 h-4" />
+            Test Telegram
+          </button>
+          <button
+            onClick={onLogout}
+            className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+            Logout
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-2 mb-6 border-b border-gray-200 overflow-x-auto">
