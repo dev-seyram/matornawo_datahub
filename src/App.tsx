@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { LayoutDashboard, ShoppingCart, Search, UserPlus, Clock, Wifi, Users, Rocket, User, ChevronRight, CheckCircle, Loader, Database, X, CreditCard, LogOut, CreditCard as Edit2, Trash2, Plus, MessageCircle, Menu, Lock, Megaphone, Linkedin, Settings } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import notFoundBg from './assets/not-found-bg.png';
 import happyCustomer from './assets/happy-customer.png';
 
@@ -337,6 +338,15 @@ function getInitialPage(): Page {
     }
   }
   return 'dashboard';
+}
+
+function getAppRoute(page: Page): string {
+  if (typeof window !== 'undefined' && page === 'not-found') {
+    return window.location.pathname;
+  }
+  if (page === 'admin') return '/dev_seyram';
+  if (page === 'dashboard') return '/';
+  return `/${page}`;
 }
 
 // ─── NOTICE TICKER ────────────────────────────────────────────────────────────
@@ -2162,7 +2172,10 @@ export default function App() {
   const hasActiveNotices = notices.some((n) => n.active);
 
   const wrapWithSettings = (content: React.ReactNode) => (
-    <SiteSettingsContext.Provider value={siteSettings}>{content}</SiteSettingsContext.Provider>
+    <SiteSettingsContext.Provider value={siteSettings}>
+      {content}
+      <SpeedInsights route={getAppRoute(activePage)} />
+    </SiteSettingsContext.Provider>
   );
 
   const refreshSiteSettings = () => {
