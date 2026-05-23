@@ -57,9 +57,11 @@ export default async function handler(req, res) {
         RETURNING *
       `;
       const saved = result[0];
-      void notifyAdminNewOrder(saved).catch((err) => {
+      try {
+        await notifyAdminNewOrder(saved);
+      } catch (err) {
         console.error('Failed to notify admin of new order:', err);
-      });
+      }
       return res.status(201).json(saved);
     }
 
