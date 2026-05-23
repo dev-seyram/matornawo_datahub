@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { LayoutDashboard, ShoppingCart, Search, UserPlus, Clock, Wifi, Users, Rocket, User, ChevronRight, CheckCircle, Loader, Database, X, CreditCard, LogOut, CreditCard as Edit2, Trash2, Plus, MessageCircle, Menu, Lock, Megaphone, Linkedin } from 'lucide-react';
+import { Analytics } from '@vercel/analytics/react';
 import notFoundBg from './assets/not-found-bg.png';
 import happyCustomer from './assets/happy-customer.png';
 
@@ -2238,6 +2239,7 @@ export default function App() {
       />
 
       {toast && <Toast message={toast.message} onClose={() => setToast(null)} variant={toast.variant} />}
+      <Analytics />
     </div>
   );
 }
