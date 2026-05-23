@@ -1,51 +1,8 @@
-import { neon } from '@neondatabase/serverless';
 import { setCorsHeaders, requireAdmin } from '../lib/adminAuth.js';
+import { ensureDb } from '../lib/db.js';
+import { sendError } from '../lib/apiError.js';
 
-const sql = neon(process.env.DATABASE_URL);
 const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/;
-
-async function initDB() {
-  await sql`
-    CREATE TABLE IF NOT EXISTS promo_slides (
-      slide_index INTEGER PRIMARY KEY CHECK (slide_index >= 1 AND slide_index <= 3),
-      title TEXT NOT NULL,
-      headline TEXT NOT NULL,
-      background_color TEXT NOT NULL DEFAULT '#2563eb',
-      updated_at TIMESTAMP DEFAULT NOW()
-    )
-  `;
-}
-
-async function ensureDefaultSlides() {
-  const defaults = [
-    {
-      slide_index: 1,
-      title: 'TELECEL PROMO',
-      headline: 'Fast & Reliable Data Plans',
-      background_color: '#2563eb',
-    },
-    {
-      slide_index: 2,
-      title: 'MTN SPECIAL',
-      headline: 'Affordable Non-Expiry Bundles',
-      background_color: '#d97706',
-    },
-    {
-      slide_index: 3,
-      title: '24/7 SERVICE',
-      headline: 'Buy Data Anytime, Anywhere',
-      background_color: '#059669',
-    },
-  ];
-
-  for (const slide of defaults) {
-    await sql`
-      INSERT INTO promo_slides (slide_index, title, headline, background_color)
-      VALUES (${slide.slide_index}, ${slide.title}, ${slide.headline}, ${slide.background_color})
-      ON CONFLICT (slide_index) DO NOTHING
-    `;
-  }
-}
 
 function normalizeHexColor(color) {
   if (typeof color !== 'string') return null;
@@ -62,11 +19,10 @@ export default async function handler(req, res) {
   }
 
   try {
-    await initDB();
-    await ensureDefaultSlides();
+    const db = await ensureDb();
 
     if (req.method === 'GET') {
-      const slides = await sql`
+      const slides = await db`
         SELECT * FROM promo_slides ORDER BY slide_index ASC
       `;
       return res.status(200).json(slides);
@@ -80,7 +36,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'slide_index must be 1, 2, or 3' });
       }
 
-      const existing = await sql`
+      const existing = await db`
         SELECT * FROM promo_slides WHERE slide_index = ${index}
       `;
       if (existing.length === 0) {
@@ -105,7 +61,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'background_color must be a hex color like #2563eb' });
       }
 
-      const result = await sql`
+      const result = await db`
         UPDATE promo_slides
         SET title = ${nextTitle},
             headline = ${nextHeadline},
@@ -119,7 +75,6 @@ export default async function handler(req, res) {
 
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (error) {
-    console.error('Promo slides API error:', error);
-    return res.status(500).json({ error: error.message });
+    return sendError(res, error, 'promo-slides');
   }
 }

@@ -1,22 +1,9 @@
-import { neon } from '@neondatabase/serverless';
 import crypto from 'crypto';
 import { setCorsHeaders, requireAdmin, isAdminRequest } from '../lib/adminAuth.js';
+import { ensureDb } from '../lib/db.js';
+import { sendError } from '../lib/apiError.js';
 
-const sql = neon(process.env.DATABASE_URL);
 const MAX_MESSAGE_LENGTH = 500;
-
-async function initDB() {
-  await sql`
-    CREATE TABLE IF NOT EXISTS notices (
-      id SERIAL PRIMARY KEY,
-      notice_id TEXT UNIQUE NOT NULL,
-      message TEXT NOT NULL,
-      active BOOLEAN DEFAULT true,
-      created_at TIMESTAMP DEFAULT NOW(),
-      updated_at TIMESTAMP DEFAULT NOW()
-    )
-  `;
-}
 
 function newNoticeId() {
   return `notice-${crypto.randomUUID()}`;
@@ -37,12 +24,12 @@ export default async function handler(req, res) {
   }
 
   try {
-    await initDB();
+    const db = await ensureDb();
 
     if (req.method === 'GET') {
       const notices = isAdminRequest(req)
-        ? await sql`SELECT * FROM notices ORDER BY created_at DESC`
-        : await sql`SELECT * FROM notices WHERE active = true ORDER BY created_at DESC`;
+        ? await db`SELECT * FROM notices ORDER BY created_at DESC`
+        : await db`SELECT * FROM notices WHERE active = true ORDER BY created_at DESC`;
       return res.status(200).json(notices);
     }
 
@@ -53,7 +40,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Message is required (max 500 characters)' });
       }
       const notice_id = newNoticeId();
-      const result = await sql`
+      const result = await db`
         INSERT INTO notices (notice_id, message, active)
         VALUES (${notice_id}, ${message}, true)
         RETURNING *
@@ -68,7 +55,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'notice_id is required' });
       }
 
-      const existing = await sql`SELECT * FROM notices WHERE notice_id = ${notice_id}`;
+      const existing = await db`SELECT * FROM notices WHERE notice_id = ${notice_id}`;
       if (existing.length === 0) {
         return res.status(404).json({ error: 'Notice not found' });
       }
@@ -85,7 +72,7 @@ export default async function handler(req, res) {
       const nextActive =
         active === undefined ? existing[0].active : Boolean(active);
 
-      const result = await sql`
+      const result = await db`
         UPDATE notices
         SET message = ${nextMessage}, active = ${nextActive}, updated_at = NOW()
         WHERE notice_id = ${notice_id}
@@ -100,13 +87,15 @@ export default async function handler(req, res) {
       if (!notice_id || typeof notice_id !== 'string') {
         return res.status(400).json({ error: 'notice_id is required' });
       }
-      await sql`DELETE FROM notices WHERE notice_id = ${notice_id}`;
+      await db`
+        UPDATE notices SET active = false, updated_at = NOW()
+        WHERE notice_id = ${notice_id}
+      `;
       return res.status(200).json({ success: true });
     }
 
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (error) {
-    console.error('Notices API error:', error);
-    return res.status(500).json({ error: error.message });
+    return sendError(res, error, 'notices');
   }
 }

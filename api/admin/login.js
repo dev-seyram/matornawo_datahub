@@ -4,6 +4,8 @@ import {
   signAdminToken,
   setAuthCookie,
 } from '../../lib/adminAuth.js';
+import { rateLimit } from '../../lib/rateLimit.js';
+import { sendError } from '../../lib/apiError.js';
 
 export default async function handler(req, res) {
   setCorsHeaders(req, res);
@@ -14,6 +16,11 @@ export default async function handler(req, res) {
 
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 'unknown';
+  if (!rateLimit(`admin-login:${ip}`, 5, 15 * 60_000)) {
+    return res.status(429).json({ error: 'Too many login attempts' });
   }
 
   try {
@@ -30,7 +37,6 @@ export default async function handler(req, res) {
     setAuthCookie(res, token);
     return res.status(200).json({ ok: true });
   } catch (error) {
-    console.error('Admin login error:', error);
-    return res.status(500).json({ error: 'Authentication is not configured' });
+    return sendError(res, error, 'admin/login');
   }
 }

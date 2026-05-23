@@ -14,14 +14,25 @@ type AdminTab = 'orders' | 'packages' | 'networks' | 'notices' | 'promos' | 'set
 interface SiteSettings {
   businessName: string;
   whatsappOrderReminderEnabled: boolean;
+  networkStates: NetworkStates;
 }
 
 const DEFAULT_BUSINESS_NAME = 'MATOE CONNECT';
 const WHATSAPP_SUPPORT_NUMBER = '233534764068';
+const ADMIN_PATH = (
+  (import.meta.env.VITE_ADMIN_PATH as string | undefined) || '/dev_seyram'
+).replace(/\/+$/, '').toLowerCase();
+
+const DEFAULT_NETWORK_STATES: NetworkStates = {
+  MTN: 'active',
+  AirtelTigo: 'disabled',
+  Telecel: 'disabled',
+};
 
 const defaultSiteSettings: SiteSettings = {
   businessName: DEFAULT_BUSINESS_NAME,
   whatsappOrderReminderEnabled: true,
+  networkStates: DEFAULT_NETWORK_STATES,
 };
 
 const SiteSettingsContext = createContext<SiteSettings>(defaultSiteSettings);
@@ -35,15 +46,8 @@ function whatsAppUrl(text: string) {
 }
 type OrderStatus = 'Pending' | 'Processing' | 'Delivered' | 'Failed';
 
-const NETWORK_STATES_KEY = 'matornawo_network_states';
 const PACKAGES_STORAGE_KEY = 'matornawo_packages';
 const DEVELOPER_LINKEDIN_URL = 'https://www.linkedin.com/in/seyramgblorkpor/';
-
-const DEFAULT_NETWORK_STATES: NetworkStates = {
-  MTN: 'active',
-  AirtelTigo: 'disabled',
-  Telecel: 'disabled',
-};
 
 const NETWORK_STATE_DESCRIPTIONS: Record<NetworkState, string> = {
   active: 'Network is active — customers can buy packages',
@@ -51,31 +55,13 @@ const NETWORK_STATE_DESCRIPTIONS: Record<NetworkState, string> = {
   closed: "Network is closed — customers see 'Store Closed'",
 };
 
-function loadNetworkStates(): NetworkStates {
-  if (typeof window === 'undefined') return DEFAULT_NETWORK_STATES;
-  try {
-    const saved = localStorage.getItem(NETWORK_STATES_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved) as Partial<NetworkStates>;
-      return {
-        MTN: parsed.MTN ?? 'active',
-        AirtelTigo: parsed.AirtelTigo ?? 'disabled',
-        Telecel: parsed.Telecel ?? 'disabled',
-      };
-    }
-    const legacy = localStorage.getItem('networkEnabled');
-    if (legacy) {
-      const old = JSON.parse(legacy) as { AirtelTigo: boolean; Telecel: boolean };
-      return {
-        MTN: 'active',
-        AirtelTigo: old.AirtelTigo ? 'active' : 'disabled',
-        Telecel: old.Telecel ? 'active' : 'disabled',
-      };
-    }
-  } catch {
-    // ignore
-  }
-  return DEFAULT_NETWORK_STATES;
+function mapNetworkStates(raw: unknown): NetworkStates {
+  const states = raw as Partial<NetworkStates> | undefined;
+  return {
+    MTN: states?.MTN ?? 'active',
+    AirtelTigo: states?.AirtelTigo ?? 'disabled',
+    Telecel: states?.Telecel ?? 'disabled',
+  };
 }
 
 // PAYSTACK: Only PUBLIC key (pk_...) belongs in frontend code.
@@ -109,6 +95,7 @@ type DbOrder = {
 };
 
 const ORDERS_API = '/api/orders';
+const PAYSTACK_VERIFY_API = '/api/paystack/verify';
 const ADMIN_LOGIN_API = '/api/admin/login';
 const ADMIN_LOGOUT_API = '/api/admin/logout';
 const ADMIN_SESSION_API = '/api/admin/session';
@@ -118,12 +105,36 @@ const SETTINGS_API = '/api/settings';
 type DbSiteSettings = {
   business_name: string;
   whatsapp_order_reminder_enabled: boolean;
+  network_states?: Partial<NetworkStates>;
 };
 
 function mapDbSiteSettings(row: DbSiteSettings): SiteSettings {
   return {
     businessName: row.business_name,
     whatsappOrderReminderEnabled: Boolean(row.whatsapp_order_reminder_enabled),
+    networkStates: mapNetworkStates(row.network_states),
+  };
+}
+
+type TrackedOrder = Pick<Order, 'orderId' | 'network' | 'package' | 'status' | 'date' | 'recipientPhone'>;
+
+type PublicDbOrder = {
+  order_id: string;
+  network: string;
+  package: string;
+  status: string;
+  created_at: string;
+  recipient_phone: string;
+};
+
+function mapPublicOrder(row: PublicDbOrder): TrackedOrder {
+  return {
+    orderId: row.order_id,
+    network: row.network as Network,
+    package: row.package,
+    status: row.status as OrderStatus,
+    date: row.created_at,
+    recipientPhone: row.recipient_phone,
   };
 }
 
@@ -159,30 +170,38 @@ async function fetchOrders(): Promise<Order[]> {
   return data.map(mapDbOrder);
 }
 
-async function fetchOrderById(orderId: string): Promise<Order | null> {
-  const res = await fetch(`${ORDERS_API}?order_id=${encodeURIComponent(orderId)}`);
+async function fetchOrderById(orderId: string, phone: string): Promise<TrackedOrder | null> {
+  const params = new URLSearchParams({
+    order_id: orderId,
+    phone,
+  });
+  const res = await fetch(`${ORDERS_API}?${params.toString()}`);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error('Failed to fetch order');
-  return mapDbOrder((await res.json()) as DbOrder);
+  return mapPublicOrder((await res.json()) as PublicDbOrder);
 }
 
-async function createOrder(order: Order): Promise<Order> {
-  const res = await fetch(ORDERS_API, {
+async function verifyPayment(params: {
+  reference: string;
+  orderId: string;
+  network: Network;
+  package: string;
+  recipientPhone: string;
+  email: string;
+}): Promise<void> {
+  const res = await fetch(PAYSTACK_VERIFY_API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      order_id: order.orderId,
-      network: order.network,
-      package: order.package,
-      price: order.price,
-      service_fee: order.serviceFee,
-      total: order.total,
-      recipient_phone: order.recipientPhone,
-      email: order.email,
+      reference: params.reference,
+      order_id: params.orderId,
+      network: params.network,
+      package: params.package,
+      recipient_phone: params.recipientPhone,
+      email: params.email,
     }),
   });
-  if (!res.ok) throw new Error('Failed to save order');
-  return mapDbOrder((await res.json()) as DbOrder);
+  if (!res.ok) throw new Error('Failed to verify payment');
 }
 
 async function patchOrderStatus(orderId: string, status: OrderStatus): Promise<Order> {
@@ -330,7 +349,7 @@ function loadCachedPackages(): Package[] {
 function getInitialPage(): Page {
   if (typeof window !== 'undefined') {
     const path = window.location.pathname.replace(/\/+$/, '').toLowerCase();
-    if (path === '/dev_seyram') {
+    if (path === ADMIN_PATH) {
       return 'admin';
     }
     if (path !== '/' && path !== '') {
@@ -344,7 +363,7 @@ function getAppRoute(page: Page): string {
   if (typeof window !== 'undefined' && page === 'not-found') {
     return window.location.pathname;
   }
-  if (page === 'admin') return '/dev_seyram';
+  if (page === 'admin') return ADMIN_PATH;
   if (page === 'dashboard') return '/';
   return `/${page}`;
 }
@@ -631,13 +650,11 @@ function BuyModal({
   isOpen,
   onClose,
   selectedPackage,
-  onOrderCreated,
   showToast,
 }: {
   isOpen: boolean;
   onClose: () => void;
   selectedPackage: SelectedPackage | null;
-  onOrderCreated: (order: Order) => Promise<void>;
   showToast: (msg: string, variant?: 'success' | 'error' | 'info') => void;
 }) {
   const { businessName, whatsappOrderReminderEnabled } = useSiteSettings();
@@ -749,20 +766,19 @@ function BuyModal({
   ) => {
     setProcessing(false);
 
-    const newOrder: Order = {
+    void verifyPayment({
+      reference,
       orderId,
       network: orderNetwork,
       package: orderPackageSize,
-      price,
-      serviceFee,
-      total,
       recipientPhone,
       email,
-      status: 'Pending',
-      date: new Date().toISOString(),
-    };
-
-    void onOrderCreated(newOrder);
+    }).catch(() => {
+      showToast(
+        'Payment received. If your order is not confirmed shortly, contact support with your order ID.',
+        'info'
+      );
+    });
 
     showToast(`✅ Payment Successful! Your ${orderPackageSize} bundle is being sent to ${recipientPhone}`, 'success');
 
@@ -1076,12 +1092,23 @@ function BuyData({
   onPackageSelect,
   packages,
   networkStates,
+  loading,
 }: {
   onPackageSelect: (pkg: SelectedPackage) => void;
   packages: Package[];
   networkStates: NetworkStates;
+  loading: boolean;
 }) {
   const [activeNetwork, setActiveNetwork] = useState<Network>('MTN');
+
+  if (loading && packages.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-3">
+        <Loader className="w-8 h-8 text-amber-400 animate-spin" />
+        <p className="text-sm text-gray-500">Loading packages…</p>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -1104,19 +1131,20 @@ function BuyData({
 
 function TrackOrder() {
   const [orderId, setOrderId] = useState('');
-  const [result, setResult] = useState<Order | 'not-found' | null>(null);
+  const [phone, setPhone] = useState('');
+  const [result, setResult] = useState<TrackedOrder | 'not-found' | null>(null);
   const [searched, setSearched] = useState(false);
 
   const handleTrack = () => {
     const key = orderId.trim().toUpperCase();
-    if (!key) return;
+    const recipientPhone = phone.trim();
+    if (!key || !/^0\d{9}$/.test(recipientPhone)) return;
     setSearched(true);
-    void fetchOrderById(key)
+    void fetchOrderById(key, recipientPhone)
       .then((found) => {
         setResult(found ?? 'not-found');
       })
-      .catch((err) => {
-        console.error('Failed to fetch order for tracking:', err);
+      .catch(() => {
         setResult('not-found');
       });
   };
@@ -1124,20 +1152,28 @@ function TrackOrder() {
   return (
     <div className="p-6 max-w-2xl mx-auto">
       <h1 className="text-2xl font-extrabold text-gray-800">Track Order</h1>
-      <p className="text-gray-400 text-sm mt-1 mb-6">Enter your order ID to track your purchase</p>
+      <p className="text-gray-400 text-sm mt-1 mb-6">Enter your order ID and recipient phone to track your purchase</p>
 
-      <div className="flex flex-col md:flex-row gap-3 mb-8">
+      <div className="flex flex-col gap-3 mb-8">
         <input
           type="text"
           value={orderId}
           onChange={(e) => { setOrderId(e.target.value); setSearched(false); setResult(null); }}
           onKeyDown={(e) => e.key === 'Enter' && handleTrack()}
           placeholder="ENTER ORDER ID (E.G., ORD-ABC12345)"
-          className="flex-1 w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 placeholder:text-gray-300 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent shadow-sm"
+          className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 placeholder:text-gray-300 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent shadow-sm"
+        />
+        <input
+          type="tel"
+          value={phone}
+          onChange={(e) => { setPhone(e.target.value); setSearched(false); setResult(null); }}
+          onKeyDown={(e) => e.key === 'Enter' && handleTrack()}
+          placeholder="RECIPIENT PHONE (E.G., 0551234567)"
+          className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 placeholder:text-gray-300 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent shadow-sm"
         />
         <button
           onClick={handleTrack}
-          className="w-full md:w-auto bg-amber-400 hover:bg-amber-300 active:scale-95 text-gray-900 font-bold px-6 py-3 rounded-xl text-sm transition-all duration-150 shadow-sm"
+          className="w-full bg-amber-400 hover:bg-amber-300 active:scale-95 text-gray-900 font-bold px-6 py-3 rounded-xl text-sm transition-all duration-150 shadow-sm"
         >
           Track
         </button>
@@ -1186,8 +1222,6 @@ function TrackOrder() {
               { label: 'Order ID', value: result.orderId },
               { label: 'Network', value: result.network },
               { label: 'Package', value: result.package },
-              { label: 'Price', value: `GH₵${result.price.toFixed(2)}` },
-              { label: 'Total', value: `GH₵${result.total.toFixed(2)}` },
               { label: 'Phone', value: result.recipientPhone },
               { label: 'Date', value: new Date(result.date).toLocaleDateString('en-GH', { timeZone: 'Africa/Accra' }) },
             ].map(({ label, value }) => (
@@ -1809,7 +1843,25 @@ function AdminPanel({
               </div>
               <select
                 value={networkStates[network]}
-                onChange={(e) => setNetworkStates((prev) => ({ ...prev, [network]: e.target.value as NetworkState }))}
+                aria-label={`${network} availability`}
+                onChange={(e) => {
+                  const value = e.target.value as NetworkState;
+                  setNetworkStates((prev) => {
+                    const next = { ...prev, [network]: value };
+                    adminFetch(SETTINGS_API, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ network_states: next }),
+                    })
+                      .then((res) => {
+                        if (!res.ok) throw new Error('Failed to save network states');
+                        onSettingsChange();
+                        showToast('Network settings saved', 'success');
+                      })
+                      .catch(() => showToast('Failed to save network settings', 'error'));
+                    return next;
+                  });
+                }}
                 className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 text-sm font-semibold text-gray-800 shrink-0"
               >
                 <option value="active">Active</option>
@@ -1856,6 +1908,7 @@ function AdminPanel({
               <button
                 type="button"
                 role="switch"
+                aria-label="Toggle WhatsApp order reminder"
                 aria-checked={settingsDraft.whatsappOrderReminderEnabled}
                 onClick={() =>
                   setSettingsDraft((prev) => ({
@@ -2165,7 +2218,8 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [packages, setPackages] = useState<Package[]>([]);
   const packagesHydratedRef = useRef(false);
-  const [networkStates, setNetworkStates] = useState<NetworkStates>(loadNetworkStates);
+  const [networkStates, setNetworkStates] = useState<NetworkStates>(DEFAULT_NETWORK_STATES);
+  const [packagesLoading, setPackagesLoading] = useState(true);
   const [notices, setNotices] = useState<Notice[]>([]);
   const [promoSlides, setPromoSlides] = useState<PromoSlide[]>([]);
   const [siteSettings, setSiteSettings] = useState<SiteSettings>(defaultSiteSettings);
@@ -2180,8 +2234,13 @@ export default function App() {
 
   const refreshSiteSettings = () => {
     fetchSiteSettings()
-      .then(setSiteSettings)
-      .catch((err) => console.error('Failed to load site settings:', err));
+      .then((settings) => {
+        setSiteSettings(settings);
+        setNetworkStates(settings.networkStates);
+      })
+      .catch(() => {
+        showToast('Failed to load site settings', 'error');
+      });
   };
 
   const refreshCustomerNotices = () => {
@@ -2197,10 +2256,6 @@ export default function App() {
   };
 
   useEffect(() => {
-    localStorage.setItem(NETWORK_STATES_KEY, JSON.stringify(networkStates));
-  }, [networkStates]);
-
-  useEffect(() => {
     refreshCustomerNotices();
     refreshPromoSlides();
     refreshSiteSettings();
@@ -2211,29 +2266,29 @@ export default function App() {
   }, [siteSettings.businessName]);
 
   useEffect(() => {
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === NETWORK_STATES_KEY && e.newValue) {
-        try { setNetworkStates(JSON.parse(e.newValue) as NetworkStates); } catch { /* ignore */ }
-      }
-    };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, []);
-
-  useEffect(() => {
+    setPackagesLoading(true);
     fetch(PACKAGES_API)
-      .then((res) => res.json())
-      .then((data: DbPackage[]) => {
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to load packages');
+        return res.json() as Promise<DbPackage[]>;
+      })
+      .then((data) => {
         packagesHydratedRef.current = true;
         if (Array.isArray(data)) {
           setPackages(data.map(mapDbPackage));
         }
       })
-      .catch((err) => {
-        console.error('Failed to load packages from database:', err);
+      .catch(() => {
         packagesHydratedRef.current = true;
-        setPackages(loadCachedPackages());
-      });
+        const cached = loadCachedPackages();
+        if (cached.length > 0) {
+          setPackages(cached);
+          showToast('Showing cached packages. Some prices may be outdated.', 'info');
+        } else {
+          showToast('Unable to load packages. Please try again later.', 'error');
+        }
+      })
+      .finally(() => setPackagesLoading(false));
   }, []);
 
   useEffect(() => {
@@ -2265,16 +2320,6 @@ export default function App() {
       .then(setOrders)
       .catch(() => setOrders([]));
   }, [adminLoggedIn]);
-
-  const handleOrderCreated = async (order: Order) => {
-    try {
-      const saved = await createOrder(order);
-      console.log('Order saved to database:', saved);
-      setOrders((prev) => [...prev, saved]);
-    } catch (err) {
-      console.error('Failed to save order to database:', err);
-    }
-  };
 
   const handleUpdateOrderStatus = async (orderId: string, status: OrderStatus) => {
     setOrders((prev) => prev.map((o) => (o.orderId === orderId ? { ...o, status } : o)));
@@ -2441,7 +2486,12 @@ export default function App() {
           />
         )}
         {activePage === 'buy-data' && (
-          <BuyData onPackageSelect={handlePackageSelect} packages={packages} networkStates={networkStates} />
+          <BuyData
+            onPackageSelect={handlePackageSelect}
+            packages={packages}
+            networkStates={networkStates}
+            loading={packagesLoading}
+          />
         )}
         {activePage === 'track-order' && <TrackOrder />}
       </main>
@@ -2450,7 +2500,6 @@ export default function App() {
         isOpen={showModal}
         onClose={() => setShowModal(false)}
         selectedPackage={selectedPackage}
-        onOrderCreated={handleOrderCreated}
         showToast={showToast}
       />
 
