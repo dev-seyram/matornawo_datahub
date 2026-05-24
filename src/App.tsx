@@ -690,8 +690,9 @@ function BuyModal({
   if (!isOpen || !selectedPackage) return null;
 
   const price = selectedPackage.price;
-  const serviceFee = parseFloat((price * 0.02).toFixed(2));
-  const total = parseFloat((price * 1.02).toFixed(2));
+  // Must match lib/validate.js calculateFees — server verifies Paystack amount against that total
+  const serviceFee = Math.round(price * 0.02 * 100) / 100;
+  const total = Math.round((price + serviceFee) * 100) / 100;
 
   const validateForm = (): boolean => {
     const newErrors: { phone?: string; email?: string } = {};
