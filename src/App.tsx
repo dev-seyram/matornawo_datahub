@@ -2348,7 +2348,7 @@ export default function App() {
 
   const showToast = (msg: string, variant: 'success' | 'error' | 'info' = 'success') => {
     setToast({ message: msg, variant });
-    setTimeout(() => setToast(null), 4000);
+    setTimeout(() => setToast(null), 30000);
   };
 
   const handlePackageSelect = (pkg: SelectedPackage) => {
