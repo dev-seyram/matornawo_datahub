@@ -72,6 +72,14 @@ export default async function handler(req, res) {
 
     const expectedKobo = Math.round(pricing.total * 100);
     if (Number(tx.amount) !== expectedKobo) {
+      console.error(JSON.stringify({
+        level: 'error',
+        context: 'paystack/verify',
+        message: 'Payment amount mismatch',
+        expected_pesewas: expectedKobo,
+        received_pesewas: tx.amount,
+        pricing,
+      }));
       return res.status(400).json({ error: 'Payment amount mismatch' });
     }
 

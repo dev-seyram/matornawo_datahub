@@ -201,7 +201,16 @@ async function verifyPayment(params: {
       email: params.email,
     }),
   });
-  if (!res.ok) throw new Error('Failed to verify payment');
+  if (!res.ok) {
+    let serverMsg = 'Failed to verify payment';
+    try {
+      const errBody = await res.json();
+      if (errBody?.error) serverMsg = errBody.error;
+    } catch {
+      // ignore json parse failure
+    }
+    throw new Error(serverMsg);
+  }
 }
 
 async function patchOrderStatus(orderId: string, status: OrderStatus): Promise<Order> {
@@ -721,6 +730,12 @@ function BuyModal({
       return;
     }
 
+    // Guard: Paystack inline script must be loaded before proceeding
+if (typeof (window as any).PaystackPop === 'undefined') {
+  showToast('Payment system is still loading. Please try again in a moment.', 'error');
+  return;
+}
+
     setProcessing(true);
 
     // Ghana Mobile Money providers supported:
@@ -773,10 +788,11 @@ function BuyModal({
       package: orderPackageSize,
       recipientPhone,
       email,
-    }).catch(() => {
+    }).catch((err) => {
+      console.error('verifyPayment failed:', err);
       showToast(
-        'Payment received. If your order is not confirmed shortly, contact support with your order ID.',
-        'info'
+        `⚠️ Order ID: ${orderId} — Payment received but order recording failed. Please contact support with this Order ID.`,
+        'error'
       );
     });
 
@@ -814,12 +830,11 @@ _Please send this message as a reminder of your order. Your data bundle will be 
 
 Thank you for choosing ${businessName}! 🙏`;
 
-      const whatsappURL = whatsAppUrl(message);
-      setPaymentSuccess({ whatsappURL });
-
-      setTimeout(() => {
-        window.open(whatsappURL, '_blank');
-      }, 1500);
+const whatsappURL = whatsAppUrl(message);
+setPaymentSuccess({ whatsappURL });
+// Open immediately — must stay in the synchronous call stack of the
+// Paystack callback to avoid browser popup-blocker triggering.
+window.open(whatsappURL, '_blank');
     } else {
       setPaymentSuccess(null);
     }
