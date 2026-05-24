@@ -28,7 +28,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const secret = process.env.PAYSTACK_SECRET_KEY;
+    const secret = process.env.VITE_PAYSTACK_PUBLIC_KEY;
     if (!secret) {
       return res.status(503).json({ error: 'Payment verification unavailable' });
     }
