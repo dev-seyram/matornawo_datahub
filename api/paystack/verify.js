@@ -62,7 +62,19 @@ export default async function handler(req, res) {
     const payload = await verifyRes.json();
 
     if (!verifyRes.ok || !payload?.status || payload.data?.status !== 'success') {
-      return res.status(400).json({ error: 'Payment not verified' });
+      console.error(
+        JSON.stringify({
+          level: 'error',
+          context: 'paystack/verify',
+          message: 'Paystack verification failed',
+          httpStatus: verifyRes.status,
+          statusText: verifyRes.statusText,
+          payload,
+          reference,
+        })
+      );
+      const errorMessage = payload?.message || payload?.data?.message || 'Payment not verified';
+      return res.status(400).json({ error: errorMessage });
     }
 
     const tx = payload.data;
@@ -83,21 +95,59 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Payment amount mismatch' });
     }
 
-    const { order, created } = await createVerifiedOrder(db, {
-      order_id: orderId,
-      network,
-      package: packageSize,
-      price: pricing.price,
-      service_fee: pricing.serviceFee,
-      total: pricing.total,
-      recipient_phone: recipientPhone,
-      email,
-      paystack_reference: reference,
-    });
+    let order;
+    let created;
+    try {
+      const result = await createVerifiedOrder(db, {
+        order_id: orderId,
+        network,
+        package: packageSize,
+        price: pricing.price,
+        service_fee: pricing.serviceFee,
+        total: pricing.total,
+        recipient_phone: recipientPhone,
+        email,
+        paystack_reference: reference,
+      });
+      order = result.order;
+      created = result.created;
+    } catch (err) {
+      console.error(
+        JSON.stringify({
+          level: 'error',
+          context: 'paystack/verify',
+          message: 'Failed to create verified order',
+          order_id: orderId,
+          paystack_reference: reference,
+          error: err?.message ?? String(err),
+          stack: err?.stack,
+        })
+      );
+      return res.status(500).json({ error: 'Failed to record order', details: err?.message ?? 'Order insert error' });
+    }
 
     if (!order) {
+      console.error(
+        JSON.stringify({
+          level: 'error',
+          context: 'paystack/verify',
+          message: 'Order creation returned no order',
+          order_id: orderId,
+          created,
+        })
+      );
       return res.status(500).json({ error: 'Failed to record order' });
     }
+
+    console.log(
+      JSON.stringify({
+        level: 'info',
+        context: 'paystack/verify',
+        message: 'ORDER SAVED',
+        order_id: order.order_id,
+        created,
+      })
+    );
 
     return res.status(created ? 201 : 200).json({
       order_id: order.order_id,

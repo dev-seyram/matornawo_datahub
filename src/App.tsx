@@ -731,10 +731,10 @@ function BuyModal({
     }
 
     // Guard: Paystack inline script must be loaded before proceeding
-if (typeof (window as any).PaystackPop === 'undefined') {
-  showToast('Payment system is still loading. Please try again in a moment.', 'error');
-  return;
-}
+    if (typeof (window as any).PaystackPop === 'undefined') {
+      showToast('Payment system is still loading. Please try again in a moment.', 'error');
+      return;
+    }
 
     setProcessing(true);
 
@@ -781,7 +781,7 @@ if (typeof (window as any).PaystackPop === 'undefined') {
   ) => {
     setProcessing(false);
 
-    void verifyPayment({
+    verifyPayment({
       reference,
       orderId,
       network: orderNetwork,
@@ -789,9 +789,10 @@ if (typeof (window as any).PaystackPop === 'undefined') {
       recipientPhone,
       email,
     }).catch((err) => {
+      const serverMessage = err?.message ?? 'Unknown server error';
       console.error('verifyPayment failed:', err);
       showToast(
-        `⚠️ Order ID: ${orderId} — Payment received but order recording failed. Please contact support with this Order ID.`,
+        `⚠️ Order ID: ${orderId} — ${serverMessage}. Please report this Order ID to support.`,
         'error'
       );
     });
