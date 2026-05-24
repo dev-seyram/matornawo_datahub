@@ -100,6 +100,7 @@ const ADMIN_LOGIN_API = '/api/admin/login';
 const ADMIN_LOGOUT_API = '/api/admin/logout';
 const ADMIN_SESSION_API = '/api/admin/session';
 const ADMIN_TELEGRAM_TEST_API = '/api/admin/telegram-test';
+const ADMIN_INTEGRATIONS_API = '/api/admin/integrations';
 const SETTINGS_API = '/api/settings';
 
 type DbSiteSettings = {
@@ -181,6 +182,24 @@ async function fetchOrderById(orderId: string, phone: string): Promise<TrackedOr
   return mapPublicOrder((await res.json()) as PublicDbOrder);
 }
 
+function formatPaymentVerifyError(serverMsg: string): string {
+  const m = serverMsg.toLowerCase();
+  if (
+    m.includes('invalid key') ||
+    m.includes('could not be confirmed') ||
+    m.includes('temporarily unavailable')
+  ) {
+    return (
+      'Your payment may have succeeded but we could not confirm it yet. ' +
+      'Contact support with your Order ID — an admin will complete your order.'
+    );
+  }
+  if (m.includes('amount mismatch')) {
+    return 'Payment amount did not match the package price. Contact support with your Order ID.';
+  }
+  return serverMsg;
+}
+
 async function verifyPayment(params: {
   reference: string;
   orderId: string;
@@ -204,14 +223,25 @@ async function verifyPayment(params: {
   if (!res.ok) {
     let serverMsg = 'Failed to verify payment';
     try {
-      const errBody = await res.json();
+      const errBody = (await res.json()) as { error?: string };
       if (errBody?.error) serverMsg = errBody.error;
     } catch {
       // ignore json parse failure
     }
-    throw new Error(serverMsg);
+    throw new Error(formatPaymentVerifyError(serverMsg));
   }
 }
+
+type IntegrationStatus = {
+  paystack: {
+    configured: boolean;
+    valid: boolean;
+    mode: 'live' | 'test' | null;
+    reason: string | null;
+  };
+  telegram: { configured: boolean; reason: string | null };
+  ready: boolean;
+};
 
 async function patchOrderStatus(orderId: string, status: OrderStatus): Promise<Order> {
   const res = await adminFetch(ORDERS_API, {
@@ -763,7 +793,7 @@ function BuyModal({
         ],
       },
       callback: function (response: { reference: string }) {
-        handlePaymentSuccess(response.reference, orderId, network, packageSize, recipientPhone);
+        void handlePaymentSuccess(response.reference, orderId, network, packageSize, recipientPhone);
       },
       onClose: function () {
         handlePaymentClosed();
@@ -773,35 +803,37 @@ function BuyModal({
     handler.openIframe();
   };
 
-  const handlePaymentSuccess = (
+  const handlePaymentSuccess = async (
     reference: string,
     orderId: string,
     orderNetwork: Network,
     orderPackageSize: string,
     recipientPhone: string
   ) => {
-    setProcessing(false);
+    setProcessing(true);
 
-    verifyPayment({
-      reference,
-      orderId,
-      network: orderNetwork,
-      package: orderPackageSize,
-      recipientPhone,
-      email,
-    }).catch((err) => {
-      const serverMessage = err?.message ?? 'Unknown server error';
+    try {
+      await verifyPayment({
+        reference,
+        orderId,
+        network: orderNetwork,
+        package: orderPackageSize,
+        recipientPhone,
+        email,
+      });
+    } catch (err) {
+      const serverMessage = err instanceof Error ? err.message : 'Unknown server error';
       console.error('verifyPayment failed:', err);
-      showToast(
-        `⚠️ Order ID: ${orderId} — ${serverMessage}. Please report this Order ID to support.`,
-        'error'
-      );
-    });
+      showToast(`Order ID: ${orderId} — ${serverMessage}`, 'error');
+      setProcessing(false);
+      return;
+    }
 
-    showToast(`✅ Payment Successful! Your ${orderPackageSize} bundle is being sent to ${recipientPhone}`, 'success');
+    showToast(`Payment successful! Your ${orderPackageSize} bundle is being sent to ${recipientPhone}`, 'success');
 
     paymentCompletedRef.current = true;
     setOrderComplete(true);
+    setProcessing(false);
 
     if (whatsappOrderReminderEnabled) {
       const orderDate = new Date().toLocaleString('en-GH', {
@@ -1290,6 +1322,8 @@ function AdminPanel({
     businessName: siteSettings.businessName,
     whatsappOrderReminderEnabled: siteSettings.whatsappOrderReminderEnabled,
   });
+  const [integrations, setIntegrations] = useState<IntegrationStatus | null>(null);
+  const [integrationsLoading, setIntegrationsLoading] = useState(false);
   const [adminNotices, setAdminNotices] = useState<Notice[]>([]);
   const [promoDrafts, setPromoDrafts] = useState<PromoSlide[]>([]);
   const [editingNoticeId, setEditingNoticeId] = useState<string | null>(null);
@@ -1333,8 +1367,27 @@ function AdminPanel({
         businessName: siteSettings.businessName,
         whatsappOrderReminderEnabled: siteSettings.whatsappOrderReminderEnabled,
       });
+      setIntegrationsLoading(true);
+      adminFetch(ADMIN_INTEGRATIONS_API)
+        .then(async (res) => {
+          if (!res.ok) throw new Error('Failed to load integration status');
+          return res.json() as Promise<IntegrationStatus>;
+        })
+        .then(setIntegrations)
+        .catch((err) => {
+          console.error('Failed to load integrations:', err);
+          setIntegrations(null);
+        })
+        .finally(() => setIntegrationsLoading(false));
     }
   }, [activeTab, siteSettings]);
+
+  const paystackPublicMode = (() => {
+    const pk = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY ?? '';
+    if (pk.startsWith('pk_live_')) return 'live';
+    if (pk.startsWith('pk_test_')) return 'test';
+    return null;
+  })();
 
   const saveSiteSettings = () => {
     const businessName = settingsDraft.businessName.trim();
@@ -1911,6 +1964,40 @@ function AdminPanel({
               placeholder="e.g. MATOE CONNECT"
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
             />
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-4 space-y-3">
+            <h3 className="font-bold text-gray-800">Payments &amp; alerts (Vercel)</h3>
+            <p className="text-xs text-gray-500">
+              Orders and Telegram only work when Paystack secret + Telegram env vars are set correctly on Vercel.
+            </p>
+            {integrationsLoading && (
+              <p className="text-sm text-gray-400">Checking configuration…</p>
+            )}
+            {!integrationsLoading && integrations && (
+              <ul className="text-sm space-y-2">
+                <li className={integrations.paystack.valid ? 'text-green-700' : 'text-red-600'}>
+                  Paystack secret:{' '}
+                  {integrations.paystack.valid
+                    ? `OK (${integrations.paystack.mode})`
+                    : integrations.paystack.reason ?? 'Invalid'}
+                </li>
+                {paystackPublicMode && integrations.paystack.mode && paystackPublicMode !== integrations.paystack.mode && (
+                  <li className="text-red-600 font-medium">
+                    Mismatch: site uses {paystackPublicMode} public key but server secret is {integrations.paystack.mode}. Use matching pk_ and sk_ keys (both live on matoe.store).
+                  </li>
+                )}
+                <li className={integrations.telegram.configured ? 'text-green-700' : 'text-red-600'}>
+                  Telegram:{' '}
+                  {integrations.telegram.configured
+                    ? 'OK'
+                    : integrations.telegram.reason ?? 'Not configured'}
+                </li>
+              </ul>
+            )}
+            {!integrationsLoading && !integrations && (
+              <p className="text-sm text-red-600">Could not load status. Log in again or refresh.</p>
+            )}
           </div>
 
           <div className="bg-white rounded-lg shadow p-4 space-y-3">

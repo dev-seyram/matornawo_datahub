@@ -10,6 +10,7 @@ import {
 } from '../../lib/validate.js';
 import { resolveOrderPricing } from '../../lib/orderPricing.js';
 import { createVerifiedOrder } from '../../lib/orders.js';
+import { getPaystackSecret } from '../../lib/paystack.js';
 
 export default async function handler(req, res) {
   setCorsHeaders(req, res);
@@ -28,9 +29,23 @@ export default async function handler(req, res) {
   }
 
   try {
-    const secret = process.env.PAYSTACK_SECRET_KEY;
-    if (!secret) {
-      return res.status(503).json({ error: 'Payment verification unavailable' });
+    let secret;
+    try {
+      secret = getPaystackSecret();
+    } catch (err) {
+      console.error(
+        JSON.stringify({
+          level: 'error',
+          context: 'paystack/verify',
+          message: 'Paystack secret misconfigured',
+          detail: err?.message,
+        })
+      );
+      return res.status(503).json({
+        error:
+          'Payment verification is temporarily unavailable. Your payment may have succeeded — save your Order ID and contact support.',
+        code: 'paystack_misconfigured',
+      });
     }
 
     const body = req.body ?? {};
@@ -73,6 +88,15 @@ export default async function handler(req, res) {
           reference,
         })
       );
+
+      if (verifyRes.status === 401 || payload?.code === 'invalid_Key') {
+        return res.status(503).json({
+          error:
+            'Payment received but could not be confirmed automatically. Save your Order ID and contact support — we will verify manually.',
+          code: 'paystack_auth_failed',
+        });
+      }
+
       const errorMessage = payload?.message || payload?.data?.message || 'Payment not verified';
       return res.status(400).json({ error: errorMessage });
     }
