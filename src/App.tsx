@@ -864,11 +864,7 @@ _Please send this message as a reminder of your order. Your data bundle will be 
 
 Thank you for choosing ${businessName}! 🙏`;
 
-const whatsappURL = whatsAppUrl(message);
-setPaymentSuccess({ whatsappURL });
-// Open immediately — must stay in the synchronous call stack of the
-// Paystack callback to avoid browser popup-blocker triggering.
-window.open(whatsappURL, '_blank');
+      setPaymentSuccess({ whatsappURL: whatsAppUrl(message) });
     } else {
       setPaymentSuccess(null);
     }
@@ -1324,6 +1320,7 @@ function AdminPanel({
   });
   const [integrations, setIntegrations] = useState<IntegrationStatus | null>(null);
   const [integrationsLoading, setIntegrationsLoading] = useState(false);
+  const [whatsappToggleSaving, setWhatsappToggleSaving] = useState(false);
   const [adminNotices, setAdminNotices] = useState<Notice[]>([]);
   const [promoDrafts, setPromoDrafts] = useState<PromoSlide[]>([]);
   const [editingNoticeId, setEditingNoticeId] = useState<string | null>(null);
@@ -1388,6 +1385,35 @@ function AdminPanel({
     if (pk.startsWith('pk_test_')) return 'test';
     return null;
   })();
+
+  const toggleWhatsappOrderReminder = () => {
+    if (whatsappToggleSaving) return;
+    const next = !settingsDraft.whatsappOrderReminderEnabled;
+    setSettingsDraft((prev) => ({ ...prev, whatsappOrderReminderEnabled: next }));
+    setWhatsappToggleSaving(true);
+    adminFetch(SETTINGS_API, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ whatsapp_order_reminder_enabled: next }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to update WhatsApp setting');
+        return res.json() as Promise<DbSiteSettings>;
+      })
+      .then(() => {
+        onSettingsChange();
+        showToast(
+          next ? 'WhatsApp order reminder enabled' : 'WhatsApp order reminder disabled',
+          'success'
+        );
+      })
+      .catch((err) => {
+        console.error('Failed to update WhatsApp setting:', err);
+        setSettingsDraft((prev) => ({ ...prev, whatsappOrderReminderEnabled: !next }));
+        showToast('Failed to update WhatsApp setting', 'error');
+      })
+      .finally(() => setWhatsappToggleSaving(false));
+  };
 
   const saveSiteSettings = () => {
     const businessName = settingsDraft.businessName.trim();
@@ -1967,6 +1993,40 @@ function AdminPanel({
           </div>
 
           <div className="bg-white rounded-lg shadow p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <MessageCircle className="w-4 h-4 text-green-600" />
+              <h3 className="font-bold text-gray-800">WhatsApp order reminder</h3>
+            </div>
+            <p className="text-xs text-gray-500">
+              When enabled, customers see a button after payment to send their order confirmation on WhatsApp.
+              Changes save immediately.
+            </p>
+            <label className="flex items-center justify-between gap-4 cursor-pointer">
+              <span className="text-sm font-medium text-gray-700">
+                {settingsDraft.whatsappOrderReminderEnabled ? 'Enabled' : 'Disabled'}
+                {whatsappToggleSaving ? ' (saving…)' : ''}
+              </span>
+              <button
+                type="button"
+                role="switch"
+                aria-label="Toggle WhatsApp order reminder"
+                aria-checked={settingsDraft.whatsappOrderReminderEnabled}
+                disabled={whatsappToggleSaving}
+                onClick={toggleWhatsappOrderReminder}
+                className={`relative w-11 h-6 rounded-full transition-colors disabled:opacity-60 ${
+                  settingsDraft.whatsappOrderReminderEnabled ? 'bg-amber-400' : 'bg-gray-300'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                    settingsDraft.whatsappOrderReminderEnabled ? 'translate-x-5' : ''
+                  }`}
+                />
+              </button>
+            </label>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-4 space-y-3">
             <h3 className="font-bold text-gray-800">Payments &amp; alerts (Vercel)</h3>
             <p className="text-xs text-gray-500">
               Orders and Telegram only work when Paystack secret + Telegram env vars are set correctly on Vercel.
@@ -1998,39 +2058,6 @@ function AdminPanel({
             {!integrationsLoading && !integrations && (
               <p className="text-sm text-red-600">Could not load status. Log in again or refresh.</p>
             )}
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-4 space-y-3">
-            <h3 className="font-bold text-gray-800">WhatsApp order reminder</h3>
-            <p className="text-xs text-gray-500">
-              When enabled, customers are prompted to send an order confirmation on WhatsApp after payment.
-            </p>
-            <label className="flex items-center justify-between gap-4 cursor-pointer">
-              <span className="text-sm font-medium text-gray-700">
-                {settingsDraft.whatsappOrderReminderEnabled ? 'Enabled' : 'Disabled'}
-              </span>
-              <button
-                type="button"
-                role="switch"
-                aria-label="Toggle WhatsApp order reminder"
-                aria-checked={settingsDraft.whatsappOrderReminderEnabled}
-                onClick={() =>
-                  setSettingsDraft((prev) => ({
-                    ...prev,
-                    whatsappOrderReminderEnabled: !prev.whatsappOrderReminderEnabled,
-                  }))
-                }
-                className={`relative w-11 h-6 rounded-full transition-colors ${
-                  settingsDraft.whatsappOrderReminderEnabled ? 'bg-amber-400' : 'bg-gray-300'
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
-                    settingsDraft.whatsappOrderReminderEnabled ? 'translate-x-5' : ''
-                  }`}
-                />
-              </button>
-            </label>
           </div>
 
           <button
