@@ -1,0 +1,189 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+
+    <!-- Background: light silver like original -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#e8ecf0"/>
+      <stop offset="100%" style="stop-color:#c8d0d8"/>
+    </linearGradient>
+
+    <!-- Chrome badge gradient -->
+    <radialGradient id="badgeGrad" cx="50%" cy="35%" r="65%">
+      <stop offset="0%" style="stop-color:#d0dae6"/>
+      <stop offset="40%" style="stop-color:#9aaabb"/>
+      <stop offset="100%" style="stop-color:#5a6a7a"/>
+    </radialGradient>
+
+    <!-- Badge rim highlight -->
+    <linearGradient id="rimGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#e8f4ff" stop-opacity="0.9"/>
+      <stop offset="40%" style="stop-color:#8ab0cc" stop-opacity="0.6"/>
+      <stop offset="100%" style="stop-color:#2a4a6a" stop-opacity="0.8"/>
+    </linearGradient>
+
+    <!-- MATOE: cyan-to-blue gradient (top to bottom) -->
+    <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#aef6ff"/>
+      <stop offset="30%" style="stop-color:#38d8f8"/>
+      <stop offset="70%" style="stop-color:#0098e0"/>
+      <stop offset="100%" style="stop-color:#0060b0"/>
+    </linearGradient>
+
+    <!-- MATOE text stroke/outline -->
+    <linearGradient id="cyanStroke" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff"/>
+      <stop offset="100%" style="stop-color:#004488"/>
+    </linearGradient>
+
+    <!-- EXPRESS: gold/orange gradient -->
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffe87a"/>
+      <stop offset="40%" style="stop-color:#f5a820"/>
+      <stop offset="100%" style="stop-color:#c06000"/>
+    </linearGradient>
+
+    <!-- BUNDLE: silver/white gradient -->
+    <linearGradient id="silverGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff"/>
+      <stop offset="40%" style="stop-color:#d8e4ee"/>
+      <stop offset="100%" style="stop-color:#8899aa"/>
+    </linearGradient>
+
+    <!-- Glow for MATOE -->
+    <filter id="cyanGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feColorMatrix in="blur" type="matrix"
+        values="0 0 0 0 0.1  0 0 0 0 0.7  0 0 0 0 1  0 0 0 0.7 0" result="glow"/>
+      <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <!-- Glow for EXPRESS -->
+    <filter id="goldGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feColorMatrix in="blur" type="matrix"
+        values="0 0 0 0 1  0 0 0 0 0.55  0 0 0 0 0  0 0 0 0.6 0" result="glow"/>
+      <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <!-- Drop shadow -->
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="3" stdDeviation="6" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
+
+    <!-- Speed line blur -->
+    <filter id="speedBlur">
+      <feGaussianBlur stdDeviation="1.5 0.5"/>
+    </filter>
+
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="256" cy="256" r="256" fill="url(#bgGrad)"/>
+
+  <!-- ── SPEED LINES LEFT (cyan, pointing right) ── -->
+  <g filter="url(#speedBlur)" opacity="0.75">
+    <rect x="14"  y="194" width="110" height="7"  rx="3.5" fill="#00c8f0"/>
+    <rect x="6"   y="210" width="90"  height="5"  rx="2.5" fill="#00a8d8"/>
+    <rect x="18"  y="224" width="72"  height="4"  rx="2"   fill="#0090c4"/>
+    <rect x="10"  y="236" width="52"  height="3"  rx="1.5" fill="#0070a8"/>
+    <!-- warm accent lines -->
+    <rect x="14"  y="248" width="80"  height="4"  rx="2"   fill="#ff6030" opacity="0.5"/>
+    <rect x="8"   y="258" width="55"  height="3"  rx="1.5" fill="#cc4820" opacity="0.4"/>
+  </g>
+
+  <!-- ── SPEED LINES RIGHT (gold/orange, pointing left) ── -->
+  <g filter="url(#speedBlur)" opacity="0.75">
+    <rect x="388" y="272" width="110" height="7"  rx="3.5" fill="#f5a820"/>
+    <rect x="400" y="288" width="90"  height="5"  rx="2.5" fill="#e89018"/>
+    <rect x="394" y="302" width="72"  height="4"  rx="2"   fill="#d07808"/>
+    <rect x="402" y="314" width="52"  height="3"  rx="1.5" fill="#b86008"/>
+    <!-- cool accent -->
+    <rect x="390" y="258" width="80"  height="4"  rx="2"   fill="#80d0f8" opacity="0.5"/>
+    <rect x="400" y="246" width="55"  height="3"  rx="1.5" fill="#50a8d8" opacity="0.4"/>
+  </g>
+
+  <!-- ── CHROME CIRCULAR BADGE ── -->
+  <!-- Outer ring shadow -->
+  <circle cx="256" cy="268" r="210" fill="none" stroke="#000" stroke-width="18" opacity="0.18"/>
+  <!-- Main badge fill -->
+  <circle cx="256" cy="260" r="208" fill="url(#badgeGrad)"/>
+  <!-- Rim ring -->
+  <circle cx="256" cy="260" r="208" fill="none" stroke="url(#rimGrad)" stroke-width="14"/>
+  <!-- Inner rim highlight -->
+  <circle cx="256" cy="260" r="194" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.3"/>
+  <!-- Concentric inner ring detail -->
+  <circle cx="256" cy="260" r="178" fill="none" stroke="#7090a8" stroke-width="1.5" opacity="0.4"/>
+
+  <!-- ── MATOE TEXT ── -->
+  <!-- Shadow layer -->
+  <text x="256" y="208"
+    font-family="'Impact', 'Arial Black', sans-serif"
+    font-size="148" font-weight="900" font-style="italic"
+    text-anchor="middle" dominant-baseline="middle"
+    fill="#001830" opacity="0.5"
+    transform="translate(3,5)">MATOE</text>
+  <!-- Outline -->
+  <text x="256" y="208"
+    font-family="'Impact', 'Arial Black', sans-serif"
+    font-size="148" font-weight="900" font-style="italic"
+    text-anchor="middle" dominant-baseline="middle"
+    fill="none" stroke="url(#cyanStroke)" stroke-width="6"
+    stroke-linejoin="round">MATOE</text>
+  <!-- Fill with glow -->
+  <text x="256" y="208"
+    font-family="'Impact', 'Arial Black', sans-serif"
+    font-size="148" font-weight="900" font-style="italic"
+    text-anchor="middle" dominant-baseline="middle"
+    fill="url(#cyanGrad)"
+    filter="url(#cyanGlow)">MATOE</text>
+
+  <!-- ── EXPRESS TEXT ── -->
+  <!-- Shadow -->
+  <text x="256" y="302"
+    font-family="'Impact', 'Arial Black', sans-serif"
+    font-size="108" font-weight="900" font-style="italic"
+    text-anchor="middle" dominant-baseline="middle"
+    fill="#301800" opacity="0.5"
+    transform="translate(3,5)">EXPRESS</text>
+  <!-- Outline -->
+  <text x="256" y="302"
+    font-family="'Impact', 'Arial Black', sans-serif"
+    font-size="108" font-weight="900" font-style="italic"
+    text-anchor="middle" dominant-baseline="middle"
+    fill="none" stroke="#7a3800" stroke-width="5"
+    stroke-linejoin="round">EXPRESS</text>
+  <!-- Fill with glow -->
+  <text x="256" y="302"
+    font-family="'Impact', 'Arial Black', sans-serif"
+    font-size="108" font-weight="900" font-style="italic"
+    text-anchor="middle" dominant-baseline="middle"
+    fill="url(#goldGrad)"
+    filter="url(#goldGlow)">EXPRESS</text>
+
+  <!-- ── BUNDLE TEXT ── -->
+  <!-- Shadow -->
+  <text x="256" y="384"
+    font-family="'Impact', 'Arial Black', sans-serif"
+    font-size="96" font-weight="900" font-style="italic"
+    text-anchor="middle" dominant-baseline="middle"
+    fill="#000" opacity="0.45"
+    transform="translate(3,5)">BUNDLE</text>
+  <!-- Outline -->
+  <text x="256" y="384"
+    font-family="'Impact', 'Arial Black', sans-serif"
+    font-size="96" font-weight="900" font-style="italic"
+    text-anchor="middle" dominant-baseline="middle"
+    fill="none" stroke="#445566" stroke-width="5"
+    stroke-linejoin="round">BUNDLE</text>
+  <!-- Fill -->
+  <text x="256" y="384"
+    font-family="'Impact', 'Arial Black', sans-serif"
+    font-size="96" font-weight="900" font-style="italic"
+    text-anchor="middle" dominant-baseline="middle"
+    fill="url(#silverGrad)">BUNDLE</text>
+
+  <!-- Top lens flare on badge -->
+  <ellipse cx="210" cy="130" rx="38" ry="12" fill="#ffffff" opacity="0.18" transform="rotate(-30,210,130)"/>
+  <ellipse cx="200" cy="126" rx="14" ry="5"  fill="#ffffff" opacity="0.35" transform="rotate(-30,200,126)"/>
+
+</svg>
