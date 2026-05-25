@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, createContext, useContext } from 'react';
-import { LayoutDashboard, ShoppingCart, Search, UserPlus, Clock, Wifi, Users, Rocket, User, ChevronRight, CheckCircle, Loader, Database, X, CreditCard, LogOut, CreditCard as Edit2, Trash2, Plus, MessageCircle, Menu, Lock, Megaphone, Linkedin, Settings } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Search, UserPlus, Clock, Wifi, Users, Rocket, User, ChevronRight, CheckCircle, Loader, X, CreditCard, LogOut, CreditCard as Edit2, Trash2, Plus, MessageCircle, Menu, Lock, Megaphone, Linkedin, Settings } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 import notFoundBg from './assets/not-found-bg.png';
@@ -39,6 +39,16 @@ const SiteSettingsContext = createContext<SiteSettings>(defaultSiteSettings);
 
 function useSiteSettings() {
   return useContext(SiteSettingsContext);
+}
+
+function BrandLogo({ className = 'w-8 h-8' }: { className?: string }) {
+  return (
+    <img
+      src="/favicon.png"
+      alt=""
+      className={`${className} rounded-lg object-contain flex-shrink-0`}
+    />
+  );
 }
 
 function whatsAppUrl(text: string) {
@@ -484,9 +494,7 @@ function NotFound() {
 
         {/* Logo */}
         <div className="flex items-center gap-2 mb-10">
-          <div className="w-10 h-10 bg-amber-400 rounded-lg flex items-center justify-center shadow-lg">
-            <Database className="w-5 h-5 text-gray-900" />
-          </div>
+          <BrandLogo className="w-10 h-10 shadow-lg" />
           <span className="text-white font-bold text-xl tracking-tight">{businessName}</span>
         </div>
 
@@ -2304,9 +2312,7 @@ function AdminLogin({ onLogin }: { onLogin: () => void; showToast?: (msg: string
     <div className="min-h-screen bg-gray-900 flex items-center justify-center">
       <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
         <div className="text-center mb-6">
-          <div className="w-12 h-12 rounded-lg bg-amber-400 flex items-center justify-center mx-auto mb-3">
-            <Database className="w-6 h-6 text-gray-900" />
-          </div>
+          <BrandLogo className="w-12 h-12 mx-auto mb-3" />
           <h1 className="text-2xl font-extrabold text-gray-900">{businessName}</h1>
           <p className="text-gray-600 text-sm mt-1">Admin Portal</p>
         </div>
@@ -2534,9 +2540,7 @@ export default function App() {
         style={{ width: '288px', backgroundColor: '#111111' }}
       >
         <div className="flex items-center gap-3 px-6 py-5 border-b border-gray-800">
-          <div className="w-8 h-8 rounded-lg bg-amber-400 flex items-center justify-center flex-shrink-0">
-            <Database className="w-4 h-4 text-gray-900" />
-          </div>
+          <BrandLogo className="w-8 h-8" />
           <span className="text-white font-bold text-sm leading-tight">{siteSettings.businessName}</span>
         </div>
 
@@ -2591,9 +2595,7 @@ export default function App() {
           >
             <Menu className="w-5 h-5" />
           </button>
-          <div className="w-6 h-6 rounded-md bg-amber-400 flex items-center justify-center">
-            <Database className="w-3.5 h-3.5 text-gray-900" />
-          </div>
+          <BrandLogo className="w-6 h-6" />
           <span className="text-white font-bold text-sm">{siteSettings.businessName}</span>
         </div>
         <button className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center hover:bg-gray-700 transition-colors">

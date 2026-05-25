@@ -9,9 +9,11 @@ export default function NotFound() {
       
       {/* Logo */}
       <div className="flex items-center gap-2 mb-8">
-        <div className="w-10 h-10 bg-amber-400 rounded-lg flex items-center justify-center">
-          <span className="text-black font-bold text-lg">M</span>
-        </div>
+        <img
+          src="/favicon.png"
+          alt=""
+          className="w-10 h-10 rounded-lg object-contain flex-shrink-0"
+        />
         <span className="text-white font-bold text-xl">MATOE CONNECT</span>
       </div>
 
