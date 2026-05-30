@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, createContext, useContext } from 'react';
-import { LayoutDashboard, ShoppingCart, Search, UserPlus, Clock, Wifi, Users, Rocket, User, ChevronRight, CheckCircle, Loader, X, CreditCard, LogOut, CreditCard as Edit2, Trash2, Plus, MessageCircle, Menu, Lock, Megaphone, Linkedin, Settings } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Search, UserPlus, Clock, Wifi, Users, Rocket, User, ChevronRight, CheckCircle, Loader, X, CreditCard, LogOut, CreditCard as Edit2, Trash2, Plus, MessageCircle, Menu, Lock, Megaphone, Linkedin, Settings, AlertTriangle } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 import notFoundBg from './assets/not-found-bg.png';
@@ -395,6 +395,28 @@ function loadCachedPackages(): Package[] {
   return [];
 }
 
+function packageKey(pkg: { network: Network; size: string }) {
+  return `${pkg.network}|${pkg.size}`;
+}
+
+function packagesHaveMismatch(current: Package[], fresh: Package[]): boolean {
+  const freshPrices = new Map(fresh.map((p) => [packageKey(p), p.price]));
+  for (const pkg of current) {
+    const dbPrice = freshPrices.get(packageKey(pkg));
+    if (dbPrice === undefined || Math.abs(pkg.price - dbPrice) > 0.001) {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function fetchFreshPackages(): Promise<Package[]> {
+  const res = await fetch(PACKAGES_API);
+  if (!res.ok) throw new Error('Failed to fetch packages');
+  const data = (await res.json()) as DbPackage[];
+  return Array.isArray(data) ? data.map(mapDbPackage) : [];
+}
+
 function getInitialPage(): Page {
   if (typeof window !== 'undefined') {
     const path = window.location.pathname.replace(/\/+$/, '').toLowerCase();
@@ -436,6 +458,90 @@ function NoticeTicker({ notices }: { notices: Notice[] }) {
         <span className="px-10" aria-hidden="true">
           {line}
         </span>
+      </div>
+    </div>
+  );
+}
+
+// ─── TOP NOTIFICATION CARD ───────────────────────────────────────────────────
+
+type TopNotificationVariant = 'error' | 'success';
+
+function TopNotificationCard({
+  title,
+  description,
+  variant = 'error',
+  durationMs = 30000,
+  onDismiss,
+  topOffsetClass,
+}: {
+  title: string;
+  description: string;
+  variant?: TopNotificationVariant;
+  durationMs?: number;
+  onDismiss: () => void;
+  topOffsetClass: string;
+}) {
+  const [progress, setProgress] = useState(100);
+  const onDismissRef = useRef(onDismiss);
+  onDismissRef.current = onDismiss;
+
+  useEffect(() => {
+    const start = Date.now();
+    const tick = () => {
+      const elapsed = Date.now() - start;
+      const remaining = Math.max(0, 100 - (elapsed / durationMs) * 100);
+      setProgress(remaining);
+      if (elapsed >= durationMs) {
+        onDismissRef.current();
+      }
+    };
+    tick();
+    const id = window.setInterval(tick, 50);
+    return () => window.clearInterval(id);
+  }, [durationMs]);
+
+  const isError = variant === 'error';
+  const borderColor = isError ? 'border-red-500' : 'border-green-500';
+  const titleColor = isError ? 'text-red-700' : 'text-green-700';
+  const progressColor = isError ? 'bg-red-500' : 'bg-green-500';
+  const iconWrap = isError ? 'bg-red-50' : 'bg-green-50';
+
+  return (
+    <div
+      className={`fixed left-0 right-0 md:left-[288px] z-[60] px-4 pointer-events-none ${topOffsetClass}`}
+      role="alert"
+    >
+      <div
+        className={`top-notification-slide-in relative pointer-events-auto max-w-lg mx-auto bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden ${borderColor} border-l-4`}
+      >
+        <div className="flex gap-3 p-4 pb-5 flex-1 min-w-0">
+          <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${iconWrap}`}>
+            {isError ? (
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
+            ) : (
+              <CheckCircle className="w-5 h-5 text-green-600" />
+            )}
+          </div>
+          <div className="flex-1 min-w-0 pr-6">
+            <p className={`font-bold text-sm ${titleColor}`}>{title}</p>
+            <p className="text-sm text-gray-600 mt-1 leading-snug">{description}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 p-1 rounded"
+            aria-label="Dismiss"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-100">
+          <div
+            className={`h-full transition-[width] duration-75 ease-linear ${progressColor}`}
+            style={{ width: `${progress}%` }}
+          />
+        </div>
       </div>
     </div>
   );
@@ -643,11 +749,13 @@ function DataPackages({
   packages,
   onPackageSelect,
   networkState,
+  buyDisabled = false,
 }: {
   network: Network;
   packages: Package[];
   onPackageSelect: (pkg: SelectedPackage) => void;
   networkState: NetworkState;
+  buyDisabled?: boolean;
 }) {
   const networkPackages = packages.filter((p) => p.network === network);
 
@@ -678,9 +786,10 @@ function DataPackages({
                 <p className="text-xl font-extrabold text-white mt-0.5">GH₵{pkg.price.toFixed(2)}</p>
                 <button
                   onClick={() => onPackageSelect({ size: pkg.size, price: pkg.price, network })}
-                  className="w-full mt-3 bg-amber-400 hover:bg-amber-300 active:scale-95 text-gray-900 font-bold text-sm py-1.5 rounded-lg transition-all duration-150"
+                  disabled={buyDisabled}
+                  className="w-full mt-3 bg-amber-400 hover:bg-amber-300 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-amber-400 disabled:active:scale-100 text-gray-900 font-bold text-sm py-1.5 rounded-lg transition-all duration-150"
                 >
-                  Buy Now
+                  {buyDisabled ? 'Checking…' : 'Buy Now'}
                 </button>
               </div>
             </div>
@@ -698,11 +807,15 @@ function BuyModal({
   onClose,
   selectedPackage,
   showToast,
+  priceSyncing,
+  validateBeforePaystack,
 }: {
   isOpen: boolean;
   onClose: () => void;
   selectedPackage: SelectedPackage | null;
   showToast: (msg: string, variant?: 'success' | 'error' | 'info') => void;
+  priceSyncing: boolean;
+  validateBeforePaystack: () => Promise<SelectedPackage | null>;
 }) {
   const { businessName, whatsappOrderReminderEnabled } = useSiteSettings();
   const [phone, setPhone] = useState('');
@@ -712,6 +825,7 @@ function BuyModal({
   const [orderComplete, setOrderComplete] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState<{ whatsappURL: string } | null>(null);
   const paymentCompletedRef = useRef(false);
+  const paidAmountsRef = useRef({ price: 0, serviceFee: 0, total: 0 });
 
   useEffect(() => {
     if (!isOpen) {
@@ -727,10 +841,10 @@ function BuyModal({
 
   if (!isOpen || !selectedPackage) return null;
 
-  const price = selectedPackage.price;
+  const displayPrice = selectedPackage.price;
   // Must match lib/validate.js calculateFees — server verifies Paystack amount against that total
-  const serviceFee = Math.round(price * 0.02 * 100) / 100;
-  const total = Math.round((price + serviceFee) * 100) / 100;
+  const displayServiceFee = Math.round(displayPrice * 0.02 * 100) / 100;
+  const displayTotal = Math.round((displayPrice + displayServiceFee) * 100) / 100;
 
   const validateForm = (): boolean => {
     const newErrors: { phone?: string; email?: string } = {};
@@ -744,9 +858,7 @@ function BuyModal({
     return Object.keys(newErrors).length === 0;
   };
 
-  const handlePaystackPayment = () => {
-    if (!validateForm()) return;
-
+  const openPaystack = (verifiedPackage: SelectedPackage) => {
     const paystackPublicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
 
     if (!paystackPublicKey || paystackPublicKey.includes('REPLACE')) {
@@ -758,10 +870,15 @@ function BuyModal({
       return;
     }
 
+    const price = verifiedPackage.price;
+    const serviceFee = Math.round(price * 0.02 * 100) / 100;
+    const total = Math.round((price + serviceFee) * 100) / 100;
+    paidAmountsRef.current = { price, serviceFee, total };
+
     const orderId = generateOrderId();
     const recipientPhone = phone;
-    const network = selectedPackage.network;
-    const packageSize = selectedPackage.size;
+    const network = verifiedPackage.network;
+    const packageSize = verifiedPackage.size;
     const amountInPesewas = Math.round(total * 100);
 
     if (amountInPesewas < 10) {
@@ -811,6 +928,13 @@ function BuyModal({
     handler.openIframe();
   };
 
+  const handlePaystackPayment = async () => {
+    if (!validateForm()) return;
+    const verifiedPackage = await validateBeforePaystack();
+    if (!verifiedPackage) return;
+    openPaystack(verifiedPackage);
+  };
+
   const handlePaymentSuccess = async (
     reference: string,
     orderId: string,
@@ -844,6 +968,7 @@ function BuyModal({
     setProcessing(false);
 
     if (whatsappOrderReminderEnabled) {
+      const { price: paidPrice, serviceFee: paidFee, total: paidTotal } = paidAmountsRef.current;
       const orderDate = new Date().toLocaleString('en-GH', {
         timeZone: 'Africa/Accra',
         dateStyle: 'medium',
@@ -861,9 +986,9 @@ function BuyModal({
 - Recipient Number: ${recipientPhone}
 
 💰 *Payment Summary:*
-- Bundle Price: GH₵${price.toFixed(2)}
-- Service Fee (2%): GH₵${serviceFee.toFixed(2)}
-- Total Paid: GH₵${total.toFixed(2)}
+- Bundle Price: GH₵${paidPrice.toFixed(2)}
+- Service Fee (2%): GH₵${paidFee.toFixed(2)}
+- Total Paid: GH₵${paidTotal.toFixed(2)}
 
 📅 Date: ${orderDate}
 🔖 Paystack Ref: ${reference}
@@ -968,21 +1093,23 @@ Thank you for choosing ${businessName}! 🙏`;
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Service (2%):</span>
-              <span className="font-semibold text-gray-800">GH₵{serviceFee.toFixed(2)}</span>
+              <span className="font-semibold text-gray-800">GH₵{displayServiceFee.toFixed(2)}</span>
             </div>
             <div className="flex justify-between pt-2 border-t border-gray-200">
               <span className="text-gray-600">Total:</span>
-              <span className="font-extrabold text-amber-500">GH₵{total.toFixed(2)}</span>
+              <span className="font-extrabold text-amber-500">GH₵{displayTotal.toFixed(2)}</span>
             </div>
           </div>
 
           <button
-            onClick={handlePaystackPayment}
-            disabled={processing}
+            onClick={() => void handlePaystackPayment()}
+            disabled={processing || priceSyncing}
             className="w-full flex items-center justify-center gap-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-500 active:scale-95 text-white font-bold py-3 rounded-xl transition-all duration-150 text-sm"
           >
             {processing ? (
               <><Loader className="w-4 h-4 animate-spin" />Processing...</>
+            ) : priceSyncing ? (
+              <><Loader className="w-4 h-4 animate-spin" />Checking prices…</>
             ) : (
               <><CreditCard className="w-4 h-4" />Pay with Paystack</>
             )}
@@ -1048,12 +1175,14 @@ function Dashboard({
   packages,
   networkStates,
   promoSlides,
+  priceSyncing,
 }: {
   showToast: (msg: string, variant?: 'success' | 'error' | 'info') => void;
   onPackageSelect: (pkg: SelectedPackage) => void;
   packages: Package[];
   networkStates: NetworkStates;
   promoSlides: PromoSlide[];
+  priceSyncing: boolean;
 }) {
   const { businessName } = useSiteSettings();
   const [activeNetwork, setActiveNetwork] = useState<Network>('MTN');
@@ -1131,6 +1260,7 @@ function Dashboard({
               packages={packages}
               onPackageSelect={onPackageSelect}
               networkState={networkStates[activeNetwork]}
+              buyDisabled={priceSyncing}
             />
           </div>
         </div>
@@ -1146,11 +1276,13 @@ function BuyData({
   packages,
   networkStates,
   loading,
+  priceSyncing,
 }: {
   onPackageSelect: (pkg: SelectedPackage) => void;
   packages: Package[];
   networkStates: NetworkStates;
   loading: boolean;
+  priceSyncing: boolean;
 }) {
   const [activeNetwork, setActiveNetwork] = useState<Network>('MTN');
 
@@ -1174,6 +1306,7 @@ function BuyData({
           packages={packages}
           onPackageSelect={onPackageSelect}
           networkState={networkStates[activeNetwork]}
+          buyDisabled={priceSyncing}
         />
       </div>
     </div>
@@ -2357,6 +2490,11 @@ export default function App() {
   const packagesHydratedRef = useRef(false);
   const [networkStates, setNetworkStates] = useState<NetworkStates>(DEFAULT_NETWORK_STATES);
   const [packagesLoading, setPackagesLoading] = useState(true);
+  const [priceSyncing, setPriceSyncing] = useState(false);
+  const [priceNotification, setPriceNotification] = useState<{
+    title: string;
+    description: string;
+  } | null>(null);
   const [notices, setNotices] = useState<Notice[]>([]);
   const [promoSlides, setPromoSlides] = useState<PromoSlide[]>([]);
   const [siteSettings, setSiteSettings] = useState<SiteSettings>(defaultSiteSettings);
@@ -2473,9 +2611,63 @@ export default function App() {
     setTimeout(() => setToast(null), 30000);
   };
 
-  const handlePackageSelect = (pkg: SelectedPackage) => {
-    setSelectedPackage(pkg);
+  const showPriceUpdatedNotification = () => {
+    setPriceNotification({
+      title: 'Price Updated',
+      description: 'Prices have been updated. Please review the new price before continuing.',
+    });
+  };
+
+  const syncPricesFromDatabase = async (
+    selected?: SelectedPackage
+  ): Promise<{ ok: boolean; selected?: SelectedPackage }> => {
+    setPriceSyncing(true);
+    try {
+      const fresh = await fetchFreshPackages();
+      const mismatched = packagesHaveMismatch(packages, fresh);
+      setPackages(fresh);
+
+      let resolvedSelected = selected;
+      if (selected) {
+        const match = fresh.find(
+          (p) => p.network === selected.network && p.size === selected.size
+        );
+        if (match) {
+          resolvedSelected = {
+            network: selected.network,
+            size: selected.size,
+            price: match.price,
+          };
+          setSelectedPackage(resolvedSelected);
+        }
+      }
+
+      if (mismatched) {
+        showPriceUpdatedNotification();
+        return { ok: false, selected: resolvedSelected };
+      }
+      return { ok: true, selected: resolvedSelected };
+    } catch {
+      showToast('Unable to verify prices. Please try again.', 'error');
+      return { ok: false };
+    } finally {
+      setPriceSyncing(false);
+    }
+  };
+
+  const handlePackageSelect = async (pkg: SelectedPackage) => {
+    if (priceSyncing) return;
+    const { ok, selected } = await syncPricesFromDatabase(pkg);
+    if (!ok) return;
+    setSelectedPackage(selected ?? pkg);
     setShowModal(true);
+  };
+
+  const validateBeforePaystack = async (): Promise<SelectedPackage | null> => {
+    if (!selectedPackage || priceSyncing) return null;
+    const { ok, selected } = await syncPricesFromDatabase(selectedPackage);
+    if (!ok || !selected) return null;
+    return selected;
   };
 
   const handleAdminLogout = () => {
@@ -2605,6 +2797,16 @@ export default function App() {
 
       <NoticeTicker notices={notices} />
 
+      {priceNotification && (
+        <TopNotificationCard
+          title={priceNotification.title}
+          description={priceNotification.description}
+          variant="error"
+          topOffsetClass={hasActiveNotices ? 'top-[5.5rem]' : 'top-14'}
+          onDismiss={() => setPriceNotification(null)}
+        />
+      )}
+
       <main
         className={`min-h-screen ml-0 md:ml-[288px] ${hasActiveNotices ? 'pt-[5.5rem]' : 'pt-14'}`}
         style={{ backgroundColor: '#f3f3f0' }}
@@ -2612,18 +2814,20 @@ export default function App() {
         {activePage === 'dashboard' && (
           <Dashboard
             showToast={showToast}
-            onPackageSelect={handlePackageSelect}
+            onPackageSelect={(pkg) => void handlePackageSelect(pkg)}
             packages={packages}
             networkStates={networkStates}
             promoSlides={promoSlides}
+            priceSyncing={priceSyncing}
           />
         )}
         {activePage === 'buy-data' && (
           <BuyData
-            onPackageSelect={handlePackageSelect}
+            onPackageSelect={(pkg) => void handlePackageSelect(pkg)}
             packages={packages}
             networkStates={networkStates}
             loading={packagesLoading}
+            priceSyncing={priceSyncing}
           />
         )}
         {activePage === 'track-order' && <TrackOrder />}
@@ -2634,6 +2838,8 @@ export default function App() {
         onClose={() => setShowModal(false)}
         selectedPackage={selectedPackage}
         showToast={showToast}
+        priceSyncing={priceSyncing}
+        validateBeforePaystack={validateBeforePaystack}
       />
 
       {toast && <Toast message={toast.message} onClose={() => setToast(null)} variant={toast.variant} />}

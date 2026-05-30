@@ -20,3 +20,18 @@
 .notice-marquee-track:hover {
   animation-play-state: paused;
 }
+
+@keyframes top-notification-slide-in {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.top-notification-slide-in {
+  animation: top-notification-slide-in 0.35s ease-out forwards;
+}
