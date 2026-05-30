@@ -102,6 +102,51 @@ export function AdminPanel({
   const [editError, setEditError] = useState<string | null>(null);
   const [addingPackage, setAddingPackage] = useState(false);
   const [newPackageForm, setNewPackageForm] = useState({ network: 'MTN' as Network, size: '', validity: '', price: '' });
+  const [telegramTestState, setTelegramTestState] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
+  const [telegramTestMessage, setTelegramTestMessage] = useState('');
+
+  useEffect(() => {
+    if (telegramTestState !== 'success') return;
+    const id = window.setTimeout(() => {
+      setTelegramTestState('idle');
+      setTelegramTestMessage('');
+    }, 8000);
+    return () => window.clearTimeout(id);
+  }, [telegramTestState]);
+
+  const handleTestTelegram = () => {
+    if (telegramTestState === 'sending') return;
+    setTelegramTestState('sending');
+    setTelegramTestMessage('');
+    showToast('Sending test message…', 'info');
+
+    adminFetch(ADMIN_TELEGRAM_TEST_API, { method: 'POST' })
+      .then(async (res) => {
+        let data: { ok?: boolean; error?: string } = {};
+        try {
+          data = (await res.json()) as { ok?: boolean; error?: string };
+        } catch {
+          // non-JSON body
+        }
+        if (res.ok && data.ok) {
+          const msg = 'Sent — check your Telegram app.';
+          setTelegramTestState('success');
+          setTelegramTestMessage(msg);
+          showToast('Test Telegram sent — check your phone', 'success');
+          return;
+        }
+        const errMsg = data.error || `Telegram test failed (${res.status})`;
+        setTelegramTestState('error');
+        setTelegramTestMessage(errMsg);
+        showToast(errMsg, 'error');
+      })
+      .catch(() => {
+        const errMsg = 'Telegram test failed — network error';
+        setTelegramTestState('error');
+        setTelegramTestMessage(errMsg);
+        showToast(errMsg, 'error');
+      });
+  };
 
   const loadAdminNotices = () => {
     adminFetch(NOTICES_API)
@@ -463,25 +508,27 @@ export function AdminPanel({
       <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
         <h1 className="text-3xl font-extrabold text-gray-800">Admin Dashboard</h1>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              adminFetch(ADMIN_TELEGRAM_TEST_API, { method: 'POST' })
-                .then(async (res) => {
-                  const data = (await res.json()) as { ok?: boolean; error?: string };
-                  if (res.ok && data.ok) {
-                    showToast('Test Telegram sent — check your phone', 'success');
-                  } else {
-                    showToast(data.error || 'Telegram test failed', 'error');
-                  }
-                })
-                .catch(() => showToast('Telegram test failed', 'error'));
-            }}
-            className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors text-sm"
-          >
-            <MessageCircle className="w-4 h-4" />
-            Test Telegram
-          </button>
+          <div className="flex flex-col items-end gap-1">
+            <button
+              type="button"
+              onClick={handleTestTelegram}
+              disabled={telegramTestState === 'sending'}
+              className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold px-4 py-2 rounded-lg transition-colors text-sm"
+            >
+              <MessageCircle className="w-4 h-4" />
+              {telegramTestState === 'sending' ? 'Sending…' : 'Test Telegram'}
+            </button>
+            {telegramTestMessage && (
+              <p
+                className={`text-xs font-medium max-w-xs text-right ${
+                  telegramTestState === 'success' ? 'text-green-700' : 'text-red-600'
+                }`}
+                role="status"
+              >
+                {telegramTestMessage}
+              </p>
+            )}
+          </div>
           <button
             onClick={onLogout}
             className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
