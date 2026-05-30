@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, createContext, useContext } from 'react';
-import { LayoutDashboard, ShoppingCart, Search, UserPlus, Clock, Wifi, Users, Rocket, User, ChevronRight, CheckCircle, Loader, X, CreditCard, LogOut, CreditCard as Edit2, Trash2, Plus, MessageCircle, Menu, Lock, Megaphone, Linkedin, Settings, AlertTriangle } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Search, UserPlus, Clock, Wifi, Users, Rocket, User, ChevronRight, CheckCircle, Loader, X, CreditCard, LogOut, CreditCard as Edit2, Trash2, Plus, MessageCircle, Menu, Lock, Megaphone, Linkedin, Settings, AlertTriangle, Info } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 import notFoundBg from './assets/not-found-bg.png';
@@ -181,15 +181,20 @@ async function fetchOrders(): Promise<Order[]> {
   return data.map(mapDbOrder);
 }
 
-async function fetchOrderById(orderId: string, phone: string): Promise<TrackedOrder | null> {
-  const params = new URLSearchParams({
-    order_id: orderId,
-    phone,
-  });
+async function fetchOrderById(orderId: string): Promise<TrackedOrder | null> {
+  const params = new URLSearchParams({ order_id: orderId });
   const res = await fetch(`${ORDERS_API}?${params.toString()}`);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error('Failed to fetch order');
   return mapPublicOrder((await res.json()) as PublicDbOrder);
+}
+
+async function fetchOrdersByPhone(phone: string): Promise<TrackedOrder[]> {
+  const params = new URLSearchParams({ phone });
+  const res = await fetch(`${ORDERS_API}?${params.toString()}`);
+  if (!res.ok) throw new Error('Failed to fetch orders');
+  const data = (await res.json()) as PublicDbOrder[];
+  return Array.isArray(data) ? data.map(mapPublicOrder) : [];
 }
 
 function formatPaymentVerifyError(serverMsg: string): string {
@@ -465,7 +470,7 @@ function NoticeTicker({ notices }: { notices: Notice[] }) {
 
 // ─── TOP NOTIFICATION CARD ───────────────────────────────────────────────────
 
-type TopNotificationVariant = 'error' | 'success';
+type TopNotificationVariant = 'error' | 'success' | 'info';
 
 function TopNotificationCard({
   title,
@@ -474,6 +479,7 @@ function TopNotificationCard({
   durationMs = 30000,
   onDismiss,
   topOffsetClass,
+  layout = 'customer',
 }: {
   title: string;
   description: string;
@@ -481,6 +487,7 @@ function TopNotificationCard({
   durationMs?: number;
   onDismiss: () => void;
   topOffsetClass: string;
+  layout?: 'customer' | 'admin';
 }) {
   const [progress, setProgress] = useState(100);
   const onDismissRef = useRef(onDismiss);
@@ -501,30 +508,48 @@ function TopNotificationCard({
     return () => window.clearInterval(id);
   }, [durationMs]);
 
-  const isError = variant === 'error';
-  const borderColor = isError ? 'border-red-500' : 'border-green-500';
-  const titleColor = isError ? 'text-red-700' : 'text-green-700';
-  const progressColor = isError ? 'bg-red-500' : 'bg-green-500';
-  const iconWrap = isError ? 'bg-red-50' : 'bg-green-50';
+  const styles =
+    variant === 'error'
+      ? {
+          border: 'border-red-500',
+          title: 'text-red-700',
+          progress: 'bg-red-500',
+          iconWrap: 'bg-red-50',
+        }
+      : variant === 'success'
+        ? {
+            border: 'border-green-500',
+            title: 'text-green-700',
+            progress: 'bg-green-500',
+            iconWrap: 'bg-green-50',
+          }
+        : {
+            border: 'border-blue-500',
+            title: 'text-blue-700',
+            progress: 'bg-blue-500',
+            iconWrap: 'bg-blue-50',
+          };
+
+  const positionClass =
+    layout === 'admin' ? 'fixed left-0 right-0 z-[60]' : 'fixed left-0 right-0 md:left-[288px] z-[60]';
 
   return (
-    <div
-      className={`fixed left-0 right-0 md:left-[288px] z-[60] px-4 pointer-events-none ${topOffsetClass}`}
-      role="alert"
-    >
+    <div className={`${positionClass} px-4 pointer-events-none ${topOffsetClass}`} role="alert">
       <div
-        className={`top-notification-slide-in relative pointer-events-auto max-w-lg mx-auto bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden ${borderColor} border-l-4`}
+        className={`top-notification-slide-in relative pointer-events-auto max-w-lg mx-auto bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden ${styles.border} border-l-4`}
       >
         <div className="flex gap-3 p-4 pb-5 flex-1 min-w-0">
-          <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${iconWrap}`}>
-            {isError ? (
+          <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${styles.iconWrap}`}>
+            {variant === 'error' ? (
               <AlertTriangle className="w-5 h-5 text-amber-500" />
-            ) : (
+            ) : variant === 'success' ? (
               <CheckCircle className="w-5 h-5 text-green-600" />
+            ) : (
+              <Info className="w-5 h-5 text-blue-600" />
             )}
           </div>
           <div className="flex-1 min-w-0 pr-6">
-            <p className={`font-bold text-sm ${titleColor}`}>{title}</p>
+            <p className={`font-bold text-sm ${styles.title}`}>{title}</p>
             <p className="text-sm text-gray-600 mt-1 leading-snug">{description}</p>
           </div>
           <button
@@ -538,28 +563,11 @@ function TopNotificationCard({
         </div>
         <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-100">
           <div
-            className={`h-full transition-[width] duration-75 ease-linear ${progressColor}`}
+            className={`h-full transition-[width] duration-75 ease-linear ${styles.progress}`}
             style={{ width: `${progress}%` }}
           />
         </div>
       </div>
-    </div>
-  );
-}
-
-// ─── TOAST ───────────────────────────────────────────────────────────────────
-
-function Toast({ message, onClose, variant = 'success' }: {
-  message: string;
-  onClose: () => void;
-  variant?: 'success' | 'error' | 'info';
-}) {
-  const bgColor = variant === 'success' ? 'bg-green-500' : variant === 'error' ? 'bg-red-500' : 'bg-gray-700';
-  return (
-    <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 ${bgColor} text-white px-6 py-3 rounded-full shadow-xl flex items-center gap-3`}>
-      {variant === 'success' && <CheckCircle className="w-4 h-4 flex-shrink-0" />}
-      <span className="text-sm font-medium">{message}</span>
-      <button onClick={onClose} className="ml-2 text-white/60 hover:text-white text-xs">✕</button>
     </div>
   );
 }
@@ -813,7 +821,7 @@ function BuyModal({
   isOpen: boolean;
   onClose: () => void;
   selectedPackage: SelectedPackage | null;
-  showToast: (msg: string, variant?: 'success' | 'error' | 'info') => void;
+  showToast: (msg: string, variant?: 'success' | 'error' | 'info', title?: string) => void;
   priceSyncing: boolean;
   validateBeforePaystack: () => Promise<SelectedPackage | null>;
 }) {
@@ -862,11 +870,11 @@ function BuyModal({
     const paystackPublicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
 
     if (!paystackPublicKey || paystackPublicKey.includes('REPLACE')) {
-      alert('Payment is not configured. Please contact support.');
+      showToast('Payment is not configured. Please contact support.', 'error', 'Payment Error');
       return;
     }
     if (paystackPublicKey.startsWith('sk_')) {
-      alert('Payment is not configured. Please contact support.');
+      showToast('Payment is not configured. Please contact support.', 'error', 'Payment Error');
       return;
     }
 
@@ -882,13 +890,13 @@ function BuyModal({
     const amountInPesewas = Math.round(total * 100);
 
     if (amountInPesewas < 10) {
-      showToast('Minimum payment is GH₵0.10', 'error');
+      showToast('Minimum payment is GH₵0.10', 'error', 'Payment Error');
       return;
     }
 
     // Guard: Paystack inline script must be loaded before proceeding
     if (typeof (window as any).PaystackPop === 'undefined') {
-      showToast('Payment system is still loading. Please try again in a moment.', 'error');
+      showToast('Payment system is still loading. Please try again in a moment.', 'error', 'Payment Error');
       return;
     }
 
@@ -956,12 +964,16 @@ function BuyModal({
     } catch (err) {
       const serverMessage = err instanceof Error ? err.message : 'Unknown server error';
       console.error('verifyPayment failed:', err);
-      showToast(`Order ID: ${orderId} — ${serverMessage}`, 'error');
+      showToast(`Order ID: ${orderId} — ${serverMessage}`, 'error', 'Payment Error');
       setProcessing(false);
       return;
     }
 
-    showToast(`Payment successful! Your ${orderPackageSize} bundle is being sent to ${recipientPhone}`, 'success');
+    showToast(
+      `Payment successful! Your ${orderPackageSize} bundle is being sent to ${recipientPhone}`,
+      'success',
+      'Payment Successful'
+    );
 
     paymentCompletedRef.current = true;
     setOrderComplete(true);
@@ -1006,7 +1018,7 @@ Thank you for choosing ${businessName}! 🙏`;
   const handlePaymentClosed = () => {
     setProcessing(false);
     if (paymentCompletedRef.current) return;
-    showToast('Payment cancelled. Your order was not placed.', 'info');
+    showToast('Payment cancelled. Your order was not placed.', 'info', 'Payment Cancelled');
   };
 
   return (
@@ -1177,7 +1189,7 @@ function Dashboard({
   promoSlides,
   priceSyncing,
 }: {
-  showToast: (msg: string, variant?: 'success' | 'error' | 'info') => void;
+  showToast: (msg: string, variant?: 'success' | 'error' | 'info', title?: string) => void;
   onPackageSelect: (pkg: SelectedPackage) => void;
   packages: Package[];
   networkStates: NetworkStates;
@@ -1315,53 +1327,151 @@ function BuyData({
 
 // ─── TRACK ORDER ──────────────────────────────────────────────────────────────
 
+type TrackMode = 'orderId' | 'phone';
+
+function OrderResultCard({ order }: { order: TrackedOrder }) {
+  return (
+    <div className="bg-white rounded-2xl shadow-md overflow-hidden">
+      <div className={`px-6 py-4 flex items-center justify-between ${
+        order.status === 'Delivered' ? 'bg-green-500' : order.status === 'Failed' ? 'bg-red-500' : order.status === 'Processing' ? 'bg-blue-600' : 'bg-amber-400'
+      }`}>
+        <div>
+          <p className="text-xs font-bold uppercase tracking-widest text-white/80">Order Status</p>
+          <p className="text-white font-extrabold text-lg mt-0.5">{order.status}</p>
+        </div>
+        {order.status === 'Delivered' ? (
+          <CheckCircle className="w-8 h-8 text-white" />
+        ) : (
+          <Loader className="w-8 h-8 text-white animate-spin" />
+        )}
+      </div>
+      <div className="px-6 py-5 space-y-0">
+        {[
+          { label: 'Order ID', value: order.orderId },
+          { label: 'Network', value: order.network },
+          { label: 'Package', value: order.package },
+          { label: 'Phone', value: order.recipientPhone },
+          { label: 'Date', value: new Date(order.date).toLocaleDateString('en-GH', { timeZone: 'Africa/Accra' }) },
+        ].map(({ label, value }) => (
+          <div key={label} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
+            <span className="text-sm text-gray-400 font-medium">{label}</span>
+            <span className="text-sm text-gray-800 font-semibold">{value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function TrackOrder() {
-  const [orderId, setOrderId] = useState('');
-  const [phone, setPhone] = useState('');
-  const [result, setResult] = useState<TrackedOrder | 'not-found' | null>(null);
+  const [mode, setMode] = useState<TrackMode>('orderId');
+  const [query, setQuery] = useState('');
+  const [singleResult, setSingleResult] = useState<TrackedOrder | null>(null);
+  const [listResult, setListResult] = useState<TrackedOrder[] | null>(null);
   const [searched, setSearched] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const trimmed = query.trim();
+  const isValid =
+    mode === 'orderId'
+      ? /^ORD-[A-Z0-9]{8}$/i.test(trimmed)
+      : /^0\d{9}$/.test(trimmed);
+
+  const resetResults = () => {
+    setSearched(false);
+    setSingleResult(null);
+    setListResult(null);
+  };
+
+  const switchMode = (next: TrackMode) => {
+    setMode(next);
+    setQuery('');
+    resetResults();
+  };
 
   const handleTrack = () => {
-    const key = orderId.trim().toUpperCase();
-    const recipientPhone = phone.trim();
-    if (!key || !/^0\d{9}$/.test(recipientPhone)) return;
+    if (!isValid) return;
+    setLoading(true);
     setSearched(true);
-    void fetchOrderById(key, recipientPhone)
-      .then((found) => {
-        setResult(found ?? 'not-found');
-      })
-      .catch(() => {
-        setResult('not-found');
-      });
+    setSingleResult(null);
+    setListResult(null);
+
+    if (mode === 'orderId') {
+      void fetchOrderById(trimmed.toUpperCase())
+        .then((found) => setSingleResult(found))
+        .catch(() => setSingleResult(null))
+        .finally(() => setLoading(false));
+      return;
+    }
+
+    void fetchOrdersByPhone(trimmed)
+      .then((orders) => setListResult(orders))
+      .catch(() => setListResult([]))
+      .finally(() => setLoading(false));
   };
+
+  const notFound =
+    searched &&
+    !loading &&
+    (mode === 'orderId' ? singleResult === null : (listResult?.length ?? 0) === 0);
+
+  const hasSingleResult = searched && !loading && singleResult !== null;
+  const hasListResults = searched && !loading && (listResult?.length ?? 0) > 0;
 
   return (
     <div className="p-6 max-w-2xl mx-auto">
       <h1 className="text-2xl font-extrabold text-gray-800">Track Order</h1>
-      <p className="text-gray-400 text-sm mt-1 mb-6">Enter your order ID and recipient phone to track your purchase</p>
+      <p className="text-gray-400 text-sm mt-1 mb-6">
+        Enter either your order ID or recipient phone to track your purchase
+      </p>
 
-      <div className="flex flex-col gap-3 mb-8">
+      <div className="flex border-b border-gray-200 bg-white rounded-t-xl overflow-hidden shadow-sm">
+        {([
+          { id: 'orderId' as TrackMode, label: 'Order ID' },
+          { id: 'phone' as TrackMode, label: 'Recipient Phone' },
+        ]).map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => switchMode(tab.id)}
+            className={`flex-1 py-3 text-sm font-semibold border-b-2 transition-all duration-200 ${
+              mode === tab.id
+                ? 'border-amber-400 text-amber-500 bg-gray-50'
+                : 'border-transparent text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-col gap-3 mb-8 bg-white rounded-b-xl shadow-sm p-4 border border-t-0 border-gray-100">
         <input
-          type="text"
-          value={orderId}
-          onChange={(e) => { setOrderId(e.target.value); setSearched(false); setResult(null); }}
-          onKeyDown={(e) => e.key === 'Enter' && handleTrack()}
-          placeholder="ENTER ORDER ID (E.G., ORD-ABC12345)"
-          className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 placeholder:text-gray-300 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent shadow-sm"
-        />
-        <input
-          type="tel"
-          value={phone}
-          onChange={(e) => { setPhone(e.target.value); setSearched(false); setResult(null); }}
-          onKeyDown={(e) => e.key === 'Enter' && handleTrack()}
-          placeholder="RECIPIENT PHONE (E.G., 0551234567)"
+          type={mode === 'phone' ? 'tel' : 'text'}
+          value={query}
+          onChange={(e) => {
+            const v =
+              mode === 'phone'
+                ? e.target.value.replace(/\D/g, '').slice(0, 10)
+                : e.target.value.toUpperCase();
+            setQuery(v);
+            resetResults();
+          }}
+          onKeyDown={(e) => e.key === 'Enter' && isValid && handleTrack()}
+          placeholder={
+            mode === 'orderId'
+              ? 'ENTER ORDER ID (E.G., ORD-ABC12345)'
+              : 'RECIPIENT PHONE (E.G., 0551234567)'
+          }
           className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 placeholder:text-gray-300 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent shadow-sm"
         />
         <button
+          type="button"
           onClick={handleTrack}
-          className="w-full bg-amber-400 hover:bg-amber-300 active:scale-95 text-gray-900 font-bold px-6 py-3 rounded-xl text-sm transition-all duration-150 shadow-sm"
+          disabled={!isValid || loading}
+          className="w-full bg-amber-400 hover:bg-amber-300 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-amber-400 disabled:active:scale-100 text-gray-900 font-bold px-6 py-3 rounded-xl text-sm transition-all duration-150 shadow-sm"
         >
-          Track
+          {loading ? 'Tracking…' : 'Track'}
         </button>
       </div>
 
@@ -1371,52 +1481,50 @@ function TrackOrder() {
             <Search className="w-8 h-8 text-gray-400" />
           </div>
           <p className="text-gray-700 font-bold text-lg">Track Your Order</p>
-          <p className="text-gray-400 text-sm text-center max-w-xs">Enter the order ID you received after purchase</p>
-        </div>
-      )}
-
-      {searched && result === 'not-found' && (
-        <div className="bg-white rounded-2xl shadow-md p-8 flex flex-col items-center gap-3">
-          <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center">
-            <Search className="w-7 h-7 text-red-400" />
-          </div>
-          <p className="font-bold text-gray-700">Order Not Found</p>
-          <p className="text-sm text-gray-400 text-center">
-            We couldn't find any order matching{' '}
-            <span className="font-semibold text-gray-600">"{orderId.trim()}"</span>. Please check the ID and try again.
+          <p className="text-gray-400 text-sm text-center max-w-xs">
+            {mode === 'orderId'
+              ? 'Enter the order ID you received after purchase'
+              : 'Enter the recipient phone to see all orders sent to that number'}
           </p>
         </div>
       )}
 
-      {searched && result && result !== 'not-found' && (
-        <div className="bg-white rounded-2xl shadow-md overflow-hidden">
-          <div className={`px-6 py-4 flex items-center justify-between ${
-            result.status === 'Delivered' ? 'bg-green-500' : result.status === 'Failed' ? 'bg-red-500' : result.status === 'Processing' ? 'bg-blue-600' : 'bg-amber-400'
-          }`}>
-            <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-white/80">Order Status</p>
-              <p className="text-white font-extrabold text-lg mt-0.5">{result.status}</p>
-            </div>
-            {result.status === 'Delivered' ? (
-              <CheckCircle className="w-8 h-8 text-white" />
+      {notFound && (
+        <div className="bg-white rounded-2xl shadow-md p-8 flex flex-col items-center gap-3">
+          <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center">
+            <Search className="w-7 h-7 text-red-400" />
+          </div>
+          <p className="font-bold text-gray-700">No Orders Found</p>
+          <p className="text-sm text-gray-400 text-center">
+            {mode === 'orderId' ? (
+              <>
+                We couldn&apos;t find any order matching{' '}
+                <span className="font-semibold text-gray-600">&quot;{trimmed.toUpperCase()}&quot;</span>.
+                Please check the ID and try again.
+              </>
             ) : (
-              <Loader className="w-8 h-8 text-white animate-spin" />
+              <>
+                We couldn&apos;t find any orders for{' '}
+                <span className="font-semibold text-gray-600">{trimmed}</span>.
+                Please check the number and try again.
+              </>
             )}
-          </div>
-          <div className="px-6 py-5 space-y-0">
-            {[
-              { label: 'Order ID', value: result.orderId },
-              { label: 'Network', value: result.network },
-              { label: 'Package', value: result.package },
-              { label: 'Phone', value: result.recipientPhone },
-              { label: 'Date', value: new Date(result.date).toLocaleDateString('en-GH', { timeZone: 'Africa/Accra' }) },
-            ].map(({ label, value }) => (
-              <div key={label} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
-                <span className="text-sm text-gray-400 font-medium">{label}</span>
-                <span className="text-sm text-gray-800 font-semibold">{value}</span>
-              </div>
-            ))}
-          </div>
+          </p>
+        </div>
+      )}
+
+      {hasSingleResult && singleResult && (
+        <OrderResultCard order={singleResult} />
+      )}
+
+      {hasListResults && listResult && (
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500 font-medium">
+            {listResult.length} order{listResult.length === 1 ? '' : 's'} found for this recipient
+          </p>
+          {listResult.map((order) => (
+            <OrderResultCard key={order.orderId} order={order} />
+          ))}
         </div>
       )}
     </div>
@@ -1447,7 +1555,7 @@ function AdminPanel({
   networkStates: NetworkStates;
   setNetworkStates: React.Dispatch<React.SetStateAction<NetworkStates>>;
   onLogout: () => void;
-  showToast: (msg: string, variant?: 'success' | 'error' | 'info') => void;
+  showToast: (msg: string, variant?: 'success' | 'error' | 'info', title?: string) => void;
   onNoticesChange: () => void;
   promoSlides: PromoSlide[];
   onPromoSlidesChange: () => void;
@@ -2410,7 +2518,7 @@ function AdminPanel({
 
 // ─── ADMIN LOGIN ──────────────────────────────────────────────────────────────
 
-function AdminLogin({ onLogin }: { onLogin: () => void; showToast?: (msg: string, variant?: 'success' | 'error' | 'info') => void }) {
+function AdminLogin({ onLogin }: { onLogin: () => void; showToast?: (msg: string, variant?: 'success' | 'error' | 'info', title?: string) => void }) {
   const { businessName } = useSiteSettings();
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -2479,7 +2587,13 @@ function AdminLogin({ onLogin }: { onLogin: () => void; showToast?: (msg: string
 
 export default function App() {
   const [activePage, setActivePage] = useState<Page>(getInitialPage);
-  const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' | 'info' } | null>(null);
+  const [topNotification, setTopNotification] = useState<{
+    id: number;
+    title: string;
+    description: string;
+    variant: TopNotificationVariant;
+  } | null>(null);
+  const notificationIdRef = useRef(0);
   const [selectedPackage, setSelectedPackage] = useState<SelectedPackage | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -2491,21 +2605,70 @@ export default function App() {
   const [networkStates, setNetworkStates] = useState<NetworkStates>(DEFAULT_NETWORK_STATES);
   const [packagesLoading, setPackagesLoading] = useState(true);
   const [priceSyncing, setPriceSyncing] = useState(false);
-  const [priceNotification, setPriceNotification] = useState<{
-    title: string;
-    description: string;
-  } | null>(null);
   const [notices, setNotices] = useState<Notice[]>([]);
   const [promoSlides, setPromoSlides] = useState<PromoSlide[]>([]);
   const [siteSettings, setSiteSettings] = useState<SiteSettings>(defaultSiteSettings);
   const hasActiveNotices = notices.some((n) => n.active);
 
-  const wrapWithSettings = (content: React.ReactNode) => (
-    <SiteSettingsContext.Provider value={siteSettings}>
-      {content}
-      <SpeedInsights route={getAppRoute(activePage)} />
-    </SiteSettingsContext.Provider>
-  );
+  const dismissNotification = () => setTopNotification(null);
+
+  const showNotification = ({
+    title,
+    description,
+    variant,
+  }: {
+    title: string;
+    description: string;
+    variant: TopNotificationVariant;
+  }) => {
+    notificationIdRef.current += 1;
+    setTopNotification({
+      id: notificationIdRef.current,
+      title,
+      description,
+      variant,
+    });
+  };
+
+  const showToast = (
+    msg: string,
+    variant: 'success' | 'error' | 'info' = 'success',
+    title?: string
+  ) => {
+    const defaultTitles = {
+      success: 'Success',
+      error: 'Error',
+      info: 'Notice',
+    };
+    showNotification({
+      title: title ?? defaultTitles[variant],
+      description: msg,
+      variant,
+    });
+  };
+
+  const wrapWithSettings = (content: React.ReactNode, opts?: { admin?: boolean }) => {
+    const isAdmin = opts?.admin ?? false;
+    const topOffsetClass = isAdmin ? 'top-4' : hasActiveNotices ? 'top-[5.5rem]' : 'top-14';
+
+    return (
+      <SiteSettingsContext.Provider value={siteSettings}>
+        {topNotification && (
+          <TopNotificationCard
+            key={topNotification.id}
+            title={topNotification.title}
+            description={topNotification.description}
+            variant={topNotification.variant}
+            topOffsetClass={topOffsetClass}
+            layout={isAdmin ? 'admin' : 'customer'}
+            onDismiss={dismissNotification}
+          />
+        )}
+        {content}
+        <SpeedInsights route={getAppRoute(activePage)} />
+      </SiteSettingsContext.Provider>
+    );
+  };
 
   const refreshSiteSettings = () => {
     fetchSiteSettings()
@@ -2606,15 +2769,11 @@ export default function App() {
     }
   };
 
-  const showToast = (msg: string, variant: 'success' | 'error' | 'info' = 'success') => {
-    setToast({ message: msg, variant });
-    setTimeout(() => setToast(null), 30000);
-  };
-
   const showPriceUpdatedNotification = () => {
-    setPriceNotification({
+    showNotification({
       title: 'Price Updated',
       description: 'Prices have been updated. Please review the new price before continuing.',
+      variant: 'error',
     });
   };
 
@@ -2693,11 +2852,12 @@ export default function App() {
       return wrapWithSettings(
         <div className="min-h-screen bg-gray-900 flex items-center justify-center">
           <Loader className="w-8 h-8 text-amber-400 animate-spin" />
-        </div>
+        </div>,
+        { admin: true }
       );
     }
     if (!adminLoggedIn) {
-      return wrapWithSettings(<AdminLogin onLogin={() => setAdminLoggedIn(true)} />);
+      return wrapWithSettings(<AdminLogin onLogin={() => setAdminLoggedIn(true)} />, { admin: true });
     }
     return wrapWithSettings(
       <AdminPanel
@@ -2714,7 +2874,8 @@ export default function App() {
         onPromoSlidesChange={refreshPromoSlides}
         siteSettings={siteSettings}
         onSettingsChange={refreshSiteSettings}
-      />
+      />,
+      { admin: true }
     );
   }
 
@@ -2797,16 +2958,6 @@ export default function App() {
 
       <NoticeTicker notices={notices} />
 
-      {priceNotification && (
-        <TopNotificationCard
-          title={priceNotification.title}
-          description={priceNotification.description}
-          variant="error"
-          topOffsetClass={hasActiveNotices ? 'top-[5.5rem]' : 'top-14'}
-          onDismiss={() => setPriceNotification(null)}
-        />
-      )}
-
       <main
         className={`min-h-screen ml-0 md:ml-[288px] ${hasActiveNotices ? 'pt-[5.5rem]' : 'pt-14'}`}
         style={{ backgroundColor: '#f3f3f0' }}
@@ -2842,7 +2993,6 @@ export default function App() {
         validateBeforePaystack={validateBeforePaystack}
       />
 
-      {toast && <Toast message={toast.message} onClose={() => setToast(null)} variant={toast.variant} />}
       <Analytics />
     </div>
   );

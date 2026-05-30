@@ -20,23 +20,48 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET') {
       const rawId = req.query?.order_id;
-      const orderId = validateOrderId(Array.isArray(rawId) ? rawId[0] : rawId);
-      if (orderId) {
-        const rawPhone = req.query?.phone;
-        const phone = validatePhone(Array.isArray(rawPhone) ? rawPhone[0] : rawPhone);
+      const rawPhone = req.query?.phone;
+      const orderIdInput = Array.isArray(rawId) ? rawId[0] : rawId;
+      const phoneInput = Array.isArray(rawPhone) ? rawPhone[0] : rawPhone;
+      const hasOrderIdParam = orderIdInput !== undefined && String(orderIdInput).trim() !== '';
+      const hasPhoneParam = phoneInput !== undefined && String(phoneInput).trim() !== '';
+
+      if (hasOrderIdParam || hasPhoneParam) {
+        if (hasOrderIdParam && hasPhoneParam) {
+          return res.status(400).json({
+            error: 'Provide either order_id or phone, not both',
+          });
+        }
+
+        if (hasOrderIdParam) {
+          const orderId = validateOrderId(orderIdInput);
+          if (!orderId) {
+            return res.status(400).json({ error: 'Invalid order ID format' });
+          }
+
+          const rows = await db`
+            SELECT * FROM orders
+            WHERE order_id = ${orderId}
+            LIMIT 1
+          `;
+          if (rows.length === 0) {
+            return res.status(404).json({ error: 'Order not found' });
+          }
+          return res.status(200).json(toPublicOrder(rows[0]));
+        }
+
+        const phone = validatePhone(phoneInput);
         if (!phone) {
-          return res.status(400).json({ error: 'Phone number is required to track an order' });
+          return res.status(400).json({ error: 'Invalid phone number format' });
         }
 
         const rows = await db`
           SELECT * FROM orders
-          WHERE order_id = ${orderId} AND recipient_phone = ${phone}
-          LIMIT 1
+          WHERE recipient_phone = ${phone}
+          ORDER BY created_at DESC
+          LIMIT 50
         `;
-        if (rows.length === 0) {
-          return res.status(404).json({ error: 'Order not found' });
-        }
-        return res.status(200).json(toPublicOrder(rows[0]));
+        return res.status(200).json(rows.map(toPublicOrder));
       }
 
       if (!requireAdmin(req, res)) return;
