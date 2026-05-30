@@ -149,6 +149,14 @@ function mapPublicOrder(row: PublicDbOrder): TrackedOrder {
   };
 }
 
+function formatOrderDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('en-GH', {
+    timeZone: 'Africa/Accra',
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+}
+
 async function fetchSiteSettings(): Promise<SiteSettings> {
   const res = await fetch(SETTINGS_API);
   if (!res.ok) throw new Error('Failed to fetch settings');
@@ -1338,6 +1346,7 @@ function OrderResultCard({ order }: { order: TrackedOrder }) {
         <div>
           <p className="text-xs font-bold uppercase tracking-widest text-white/80">Order Status</p>
           <p className="text-white font-extrabold text-lg mt-0.5">{order.status}</p>
+          <p className="text-white/80 text-xs mt-1">Placed {formatOrderDateTime(order.date)}</p>
         </div>
         {order.status === 'Delivered' ? (
           <CheckCircle className="w-8 h-8 text-white" />
@@ -1351,7 +1360,7 @@ function OrderResultCard({ order }: { order: TrackedOrder }) {
           { label: 'Network', value: order.network },
           { label: 'Package', value: order.package },
           { label: 'Phone', value: order.recipientPhone },
-          { label: 'Date', value: new Date(order.date).toLocaleDateString('en-GH', { timeZone: 'Africa/Accra' }) },
+          { label: 'Placed', value: formatOrderDateTime(order.date) },
         ].map(({ label, value }) => (
           <div key={label} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
             <span className="text-sm text-gray-400 font-medium">{label}</span>
@@ -2005,7 +2014,7 @@ function AdminPanel({
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  {['Order ID', 'Network', 'Package', 'Phone', 'Total', 'Date', 'Status'].map((col) => (
+                  {['Order ID', 'Network', 'Package', 'Phone', 'Total', 'Placed', 'Status'].map((col) => (
                     <th key={col} className="px-4 py-3 text-left text-sm font-semibold text-gray-700">{col}</th>
                   ))}
                 </tr>
@@ -2024,7 +2033,7 @@ function AdminPanel({
                       <td className="px-4 py-3 text-sm text-gray-700">{order.recipientPhone}</td>
                       <td className="px-4 py-3 text-sm font-semibold text-gray-800">GH₵{order.total.toFixed(2)}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">
-                        {new Date(order.date).toLocaleDateString('en-GH', { timeZone: 'Africa/Accra' })}
+                        {formatOrderDateTime(order.date)}
                       </td>
                       <td className="px-4 py-3 text-sm">
                         <div className="flex items-center gap-2">
