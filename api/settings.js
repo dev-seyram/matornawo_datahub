@@ -1,7 +1,7 @@
 import { setCorsHeaders, requireAdmin } from '../lib/adminAuth.js';
 import { ensureDb } from '../lib/db.js';
 import { sendError } from '../lib/apiError.js';
-import { validateNetwork, validateNetworkState } from '../lib/validate.js';
+import { validateNetwork, validateNetworkState, validateWhatsAppSupportNumber } from '../lib/validate.js';
 
 const DEFAULT_BUSINESS_NAME = 'MATOE CONNECT';
 const MAX_BUSINESS_NAME_LENGTH = 80;
@@ -46,6 +46,7 @@ export default async function handler(req, res) {
       return res.status(200).json({
         business_name: row.business_name,
         whatsapp_order_reminder_enabled: row.whatsapp_order_reminder_enabled,
+        whatsapp_support_number: row.whatsapp_support_number ?? '233534764068',
         network_states: row.network_states ?? DEFAULT_NETWORK_STATES,
         updated_at: row.updated_at,
       });
@@ -59,9 +60,11 @@ export default async function handler(req, res) {
         return res.status(404).json({ error: 'Settings not found' });
       }
 
-      const { business_name, whatsapp_order_reminder_enabled, network_states } = req.body ?? {};
+      const { business_name, whatsapp_order_reminder_enabled, whatsapp_support_number, network_states } =
+        req.body ?? {};
       let nextName = existing[0].business_name;
       let nextReminder = existing[0].whatsapp_order_reminder_enabled;
+      let nextWhatsApp = existing[0].whatsapp_support_number ?? '233534764068';
       let nextNetworkStates = existing[0].network_states ?? DEFAULT_NETWORK_STATES;
 
       if (business_name !== undefined) {
@@ -78,6 +81,16 @@ export default async function handler(req, res) {
         nextReminder = Boolean(whatsapp_order_reminder_enabled);
       }
 
+      if (whatsapp_support_number !== undefined) {
+        const normalized = validateWhatsAppSupportNumber(whatsapp_support_number);
+        if (!normalized) {
+          return res.status(400).json({
+            error: 'whatsapp_support_number must be 12 digits starting with 233 (e.g. 233534764068)',
+          });
+        }
+        nextWhatsApp = normalized;
+      }
+
       if (network_states !== undefined) {
         const normalizedStates = normalizeNetworkStates(network_states);
         if (!normalizedStates) {
@@ -90,6 +103,7 @@ export default async function handler(req, res) {
         UPDATE site_settings
         SET business_name = ${nextName},
             whatsapp_order_reminder_enabled = ${nextReminder},
+            whatsapp_support_number = ${nextWhatsApp},
             network_states = ${nextNetworkStates},
             updated_at = NOW()
         WHERE id = 1
@@ -98,6 +112,7 @@ export default async function handler(req, res) {
       return res.status(200).json({
         business_name: result[0].business_name,
         whatsapp_order_reminder_enabled: result[0].whatsapp_order_reminder_enabled,
+        whatsapp_support_number: result[0].whatsapp_support_number,
         network_states: result[0].network_states,
         updated_at: result[0].updated_at,
       });

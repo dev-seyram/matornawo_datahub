@@ -1,6 +1,8 @@
 import { setCorsHeaders, requireAdmin } from '../lib/adminAuth.js';
 import { ensureDb } from '../lib/db.js';
 import { sendError } from '../lib/apiError.js';
+import { rateLimit } from '../lib/rateLimit.js';
+import { parsePublicTrackQuery } from '../lib/orderTrack.js';
 import {
   validateOrderId,
   validateOrderStatus,
@@ -19,22 +21,20 @@ export default async function handler(req, res) {
     const db = await ensureDb();
 
     if (req.method === 'GET') {
-      const rawId = req.query?.order_id;
-      const rawPhone = req.query?.phone;
-      const orderIdInput = Array.isArray(rawId) ? rawId[0] : rawId;
-      const phoneInput = Array.isArray(rawPhone) ? rawPhone[0] : rawPhone;
-      const hasOrderIdParam = orderIdInput !== undefined && String(orderIdInput).trim() !== '';
-      const hasPhoneParam = phoneInput !== undefined && String(phoneInput).trim() !== '';
+      const trackQuery = parsePublicTrackQuery(req.query);
 
-      if (hasOrderIdParam || hasPhoneParam) {
-        if (hasOrderIdParam && hasPhoneParam) {
-          return res.status(400).json({
-            error: 'Provide either order_id or phone, not both',
-          });
+      if (trackQuery.kind !== 'none') {
+        const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 'unknown';
+        if (!rateLimit(`orders-track:${ip}`, 30, 60_000)) {
+          return res.status(429).json({ error: 'Too many requests' });
         }
 
-        if (hasOrderIdParam) {
-          const orderId = validateOrderId(orderIdInput);
+        if (trackQuery.kind === 'invalid') {
+          return res.status(400).json({ error: trackQuery.error });
+        }
+
+        if (trackQuery.kind === 'orderId') {
+          const orderId = validateOrderId(trackQuery.orderIdInput);
           if (!orderId) {
             return res.status(400).json({ error: 'Invalid order ID format' });
           }
@@ -50,7 +50,7 @@ export default async function handler(req, res) {
           return res.status(200).json(toPublicOrder(rows[0]));
         }
 
-        const phone = validatePhone(phoneInput);
+        const phone = validatePhone(trackQuery.phoneInput);
         if (!phone) {
           return res.status(400).json({ error: 'Invalid phone number format' });
         }
@@ -85,7 +85,7 @@ export default async function handler(req, res) {
       }
 
       const result = await db`
-        UPDATE orders SET status = ${status}
+        UPDATE orders SET status = ${status}, updated_at = NOW()
         WHERE order_id = ${orderId}
         RETURNING *
       `;
