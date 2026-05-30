@@ -31,7 +31,7 @@ Public order tracking (`GET /api/orders?order_id=…` or `?phone=…`) is rate-l
 ## Assets
 
 - `public/favicon.svg` — site icon
-- `public/og-source.png` — master hero for link previews; run `npm run generate-og-image` to rebuild `og-image.png` (1200×630)
+- `public/og-source.png` — master hero; run `npm run generate-og-image` → `og-image.jpg` (WhatsApp-friendly, &lt;300 KB) + `og-image.png`
 
 ## Contact
 
